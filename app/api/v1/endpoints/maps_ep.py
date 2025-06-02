@@ -28,7 +28,7 @@ router = APIRouter()
 s3_service_instance = S3Service()  # Instantiate S3 service
 
 
-@router.post("/secure-generate/", response_model=MultipleCMVSResponse)
+@router.post("/generate/", response_model=MultipleCMVSResponse)
 async def generate_concept_map_secure_endpoint(
     files: List[UploadFile] = File(
         ..., description="One or more PDF files to process."
@@ -187,7 +187,7 @@ async def generate_concept_map_secure_endpoint(
 
 
 @router.get(
-    "/node-details-rag/", response_model=NodeDetailResponse, tags=["Concept Maps"]
+    "/details/", response_model=NodeDetailResponse, tags=["Maps"]
 )  # New path or updated old one
 async def get_node_details_rag_endpoint(  # Renamed endpoint function for clarity
     concept_map_id: str = Query(

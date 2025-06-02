@@ -22,7 +22,7 @@ A sophisticated AI-powered API that transforms PDF documents into interactive co
 - **Async Architecture**: Built with FastAPI for high-performance async operations
 - **LangGraph Pipeline**: State-based processing workflow using LangGraph
 - **S3 Storage**: Document storage and management with S3-compatible services
-- **MongoDB Integration**: Persistent storage for users, concept maps, and embeddings
+- **MongoDB Integration**: Persistent storage for users, Maps, and embeddings
 - **Error Handling**: Comprehensive error handling and logging throughout the pipeline
 
 ## 🏗️ Architecture
@@ -175,8 +175,8 @@ python test_pipeline.py
 - `POST /api/v1/auth/google` - Authenticate with Google OAuth
 - `GET /api/v1/auth/users/me` - Get current user information
 
-### Concept Maps
-- `POST /api/v1/concept-maps/secure-generate/` - Generate concept maps from PDFs
+### Maps
+- `POST /api/v1/concept-maps/secure-generate/` - Generate Maps from PDFs
 
 ### Example Usage
 
@@ -222,7 +222,7 @@ python test_pipeline.py
 ### Collections
 
 1. **users** - User authentication and profile data
-2. **concept_maps_api_s3_auth** - Generated concept maps with metadata
+2. **concept_maps_api_s3_auth** - Generated Maps with metadata
 3. **chunk_embeddings** - Text chunks with vector embeddings
 
 ## 🔍 Monitoring & Debugging
