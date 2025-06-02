@@ -1,0 +1,62 @@
+import pymongo
+from app.core.config import settings, logger
+from typing import Any, Dict, Optional
+
+# Global MongoDB client instance
+mongo_client: Optional[pymongo.MongoClient] = None
+
+
+def get_mongo_client() -> pymongo.MongoClient:
+    global mongo_client
+    if mongo_client is None:
+        try:
+            mongo_client = pymongo.MongoClient(
+                settings.MONGODB_URI, serverSelectionTimeoutMS=5000
+            )
+            mongo_client.admin.command("ping")  # Verify connection
+            logger.info("Successfully connected to MongoDB.")
+        except Exception as e:
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            raise  # Re-raise exception to handle during startup or first access
+    return mongo_client
+
+
+def get_db():
+    client = get_mongo_client()
+    return client[settings.MONGODB_DATABASE_NAME]
+
+
+def get_users_collection():
+    db = get_db()
+    users_coll = db[settings.MONGODB_USERS_COLLECTION]
+    # Ensure indexes (idempotent operation)
+    users_coll.create_index(
+        [("google_id", pymongo.ASCENDING)], unique=True, background=True
+    )
+    users_coll.create_index(
+        [("email", pymongo.ASCENDING)], unique=True, background=True
+    )
+    return users_coll
+
+
+def get_cmvs_collection():
+    db = get_db()
+    return db[settings.MONGODB_CMVS_COLLECTION]
+
+
+def get_chunk_embeddings_collection():
+    db = get_db()
+    # Add index for embeddings if planning vector search (MongoDB Atlas specific)
+    # Example: chunks_coll.create_index([("embedding", "vector")], name="vector_index", ...)
+    return db[settings.MONGODB_CHUNKS_COLLECTION]
+
+
+def mongo_to_pydantic(doc: Dict[str, Any], model_class):
+    if doc and "_id" in doc:
+        doc["id"] = str(doc["_id"])
+    return model_class(**doc)
+
+
+# Call this during app startup to initialize client and log connection status
+def init_mongodb():
+    get_mongo_client()  # Initializes and pings
