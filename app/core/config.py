@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     MONGODB_USERS_COLLECTION: str = "users"
     MONGODB_CMVS_COLLECTION: str = "concept_maps_api_s3_auth"
     MONGODB_CHUNKS_COLLECTION: str = "chunk_embeddings"
+    MONGODB_ATLAS_VECTOR_SEARCH_INDEX_NAME: str = "vector_index_on_embedding"
 
     # S3
     S3_ACCESS_KEY_ID: str

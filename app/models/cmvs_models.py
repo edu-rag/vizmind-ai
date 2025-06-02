@@ -29,6 +29,22 @@ class CMVSResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+# --- Multiple CMVS Response Model ---
 class MultipleCMVSResponse(BaseModel):
     results: List[CMVSResponse]
     overall_errors: Optional[List[str]] = None  # For errors not tied to a specific file
+
+
+class RetrievedChunk(BaseModel):
+    text: str
+    similarity_score: Optional[float] = None
+    s3_path_source_pdf: Optional[str] = None
+    original_filename_source_pdf: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+
+
+class NodeDetailResponse(BaseModel):
+    query: str
+    answer: str
+    source_chunks: List[RetrievedChunk]
+    message: Optional[str] = None

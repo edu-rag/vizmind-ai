@@ -41,12 +41,14 @@ langchain-core==0.3.63
 langchain-experimental==0.3.4
 langchain-groq==0.3.2
 langchain-huggingface==0.2.0
+langchain-mongodb==0.6.2
 langchain-text-splitters==0.3.8
 langgraph==0.4.7
 langgraph-checkpoint==2.0.26
 langgraph-prebuilt==0.2.2
 langgraph-sdk==0.1.70
 langsmith==0.3.43
+lark==1.2.2
 MarkupSafe==3.0.2
 marshmallow==3.26.1
 mpmath==1.3.0
