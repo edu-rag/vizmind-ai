@@ -222,3 +222,77 @@ async def get_node_details_rag_endpoint(
         pass
 
     return response
+
+
+@router.get("/ask/", response_model=NodeDetailResponse, tags=["Maps"])
+async def ask_question_about_node_endpoint(
+    concept_map_id: str = Query(
+        ..., description="The ID of the main concept map document providing context."
+    ),
+    question: str = Query(
+        ..., description="The specific question the user wants to ask."
+    ),
+    context_node_label: Optional[str] = Query(
+        None,
+        description="(Optional) The label of the node or concept this question is primarily about, to help focus the search.",
+    ),
+    top_k: Optional[int] = Query(
+        3, description="Number of source chunks to retrieve for context.", ge=1, le=5
+    ),
+    current_user: UserModelInDB = Depends(get_current_active_user),
+):
+    """
+    Answers a specific question related to a concept/node within a given concept map,
+    using a RAG pipeline with potential fallback to web search and source citation.
+    """
+    if not concept_map_id or not question:
+        raise HTTPException(
+            status_code=400, detail="concept_map_id and question are required."
+        )
+
+    # Construct an effective query for the RAG pipeline.
+    # If context_node_label is provided, prepend it to the question for better focus.
+    effective_query = question
+    if context_node_label:
+        effective_query = (
+            f"Regarding the concept or topic of '{context_node_label}': {question}"
+        )
+
+    logger.info(
+        f"User '{current_user.email}' asking about map '{concept_map_id}': '{effective_query}'"
+    )
+
+    try:
+        # Call the existing RAG service function
+        response = await get_node_details_with_rag(
+            concept_map_id=concept_map_id,
+            node_query=effective_query,
+            user_id=current_user.id,
+            top_k_retriever=top_k,
+        )
+
+        # The get_node_details_with_rag function already returns NodeDetailRAGResponse,
+        # which includes handling for errors by setting a message in the answer.
+        # So, we can often return its response directly.
+        if (
+            not response
+        ):  # Should not happen if get_node_details_with_rag always returns a response object
+            logger.error(f"No response from RAG service for query: {effective_query}")
+            raise HTTPException(
+                status_code=500, detail="Failed to process the question."
+            )
+
+        return response
+
+    except Exception as e:
+        logger.error(
+            f"API Error in ask_question_about_node_endpoint for query '{effective_query}', map '{concept_map_id}': {e}",
+            exc_info=True,
+        )
+        # Return a NodeDetailRAGResponse compliant error structure
+        return NodeDetailResponse(
+            query=effective_query,
+            answer=f"An internal server error occurred while processing your question: {str(e)}",
+            cited_sources=[],
+            message="Failed to get an answer due to a server error.",
+        )
