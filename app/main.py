@@ -8,7 +8,7 @@ from app.db.mongodb_utils import init_mongodb, get_mongo_client
 from app.services.s3_service import (
     S3Service,
 )  # Assuming S3Service is structured this way
-from app.langgraph_pipeline.builder import build_graph_instance
+from app.langgraph_pipeline.builder.cmvs_builder import build_graph_instance
 
 
 # Lifespan manager (assuming it's similar to previous versions)

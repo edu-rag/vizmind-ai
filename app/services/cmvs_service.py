@@ -1,12 +1,18 @@
-from app.langgraph_pipeline.builder import get_langgraph_app
+from app.langgraph_pipeline.builder.cmvs_builder import get_langgraph_app
 from app.langgraph_pipeline.state import GraphState
 from app.core.config import settings, logger
-from app.db.mongodb_utils import get_db
 from app.models.cmvs_models import RetrievedChunk, NodeDetailResponse
+
+from app.langgraph_pipeline.builder.rag_builder import get_rag_app
+from app.langgraph_pipeline.state import RAGGraphState
+from app.models.cmvs_models import (
+    NodeDetailResponse,
+    CitationSource,
+)  # Use the new response model
+
 import uuid
 
-import asyncio
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 
 
 # Langchain imports for RAG
@@ -114,10 +120,7 @@ async def get_rag_details_for_node(
         # 2. Create a Retriever with pre-filtering
         # The pre_filter stage in Atlas Vector Search uses MQL (MongoDB Query Language).
         # Ensure 'user_id' and 'concept_map_id' are properly indexed as filter fields in your Atlas Search Index.
-        retriever_filter = {
-            "user_id": user_id,
-            "concept_map_id": concept_map_id
-        }
+        retriever_filter = {"user_id": user_id, "concept_map_id": concept_map_id}
 
         retriever = vector_store.as_retriever(
             search_type="similarity",  # Or "mmr" for max marginal relevance
@@ -207,4 +210,90 @@ Answer:"""
             query=node_query,
             answer=f"Error processing your request: {str(e)}",
             source_chunks=[],
+        )
+
+
+async def get_node_details_with_rag(  # Renamed function
+    concept_map_id: str, node_query: str, user_id: str, top_k_retriever: int = 3
+) -> NodeDetailResponse:  # Return new response model
+
+    logger.info(
+        f"Service: Initiating RAG pipeline for node '{node_query}', map '{concept_map_id}', user '{user_id}'."
+    )
+    rag_app = get_rag_app()  # Get the compiled RAG graph
+
+    initial_rag_state = RAGGraphState(
+        question=node_query,
+        user_id=user_id,
+        concept_map_id=concept_map_id,
+        top_k_retriever=top_k_retriever,
+        db_documents=[],
+        web_documents=None,
+        answer="",
+        cited_sources=[],
+        db_retrieval_status="",
+        error_message=None,
+    )
+
+    try:
+        # Run the RAG graph
+        # Use a unique config for each invocation if using checkpointers that need it
+        # config = {"configurable": {"thread_id": f"rag-{user_id}-{uuid.uuid4()}"}}
+        final_state = await rag_app.ainvoke(
+            initial_rag_state
+        )  # No config needed if not using persistent checkpointer per call
+
+        if final_state.get("error_message"):
+            logger.error(
+                f"RAG pipeline error for query '{node_query}': {final_state['error_message']}"
+            )
+            return NodeDetailResponse(
+                query=node_query,
+                answer=f"An error occurred: {final_state['error_message']}",
+                cited_sources=[],
+                message=f"Error during processing: {final_state['error_message']}",
+            )
+
+        # Transform cited_sources from the graph state (list of dicts) to list of CitationSource Pydantic models
+        formatted_citations: List[CitationSource] = []
+        for src_dict in final_state.get("cited_sources", []):
+            try:
+                formatted_citations.append(CitationSource(**src_dict))
+            except Exception as e:
+                logger.warning(f"Could not format citation: {src_dict}, error: {e}")
+
+        search_type = "db_only"
+        if (
+            final_state.get("web_documents") is not None
+            and len(final_state["web_documents"]) > 0
+        ):  # Check if web_documents were populated
+            search_type = "db_and_web_search"
+        elif final_state.get("db_retrieval_status") == "perform_web_search" and (
+            final_state.get("web_documents") is None
+            or len(final_state.get("web_documents", [])) == 0
+        ):
+            search_type = "db_and_web_search_no_web_results"
+
+        return NodeDetailResponse(
+            query=node_query,
+            answer=final_state.get("answer", "No answer could be generated."),
+            cited_sources=formatted_citations,
+            search_performed=search_type,
+            message=(
+                "Successfully retrieved details."
+                if final_state.get("answer")
+                else "Could not generate a conclusive answer."
+            ),
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Service level error running RAG pipeline for node '{node_query}': {e}",
+            exc_info=True,
+        )
+        return NodeDetailResponse(
+            query=node_query,
+            answer=f"A critical error occurred while processing your request: {str(e)}",
+            cited_sources=[],
+            message="Critical server error.",
         )

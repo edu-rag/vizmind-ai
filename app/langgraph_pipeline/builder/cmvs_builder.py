@@ -2,7 +2,7 @@ from typing import Optional
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from app.langgraph_pipeline.state import GraphState
-from app.langgraph_pipeline.nodes import CMVSNodes
+from app.langgraph_pipeline.nodes.cmvs_nodes import CMVSNodes
 from app.core.config import settings, logger
 
 # Global LangGraph app instance

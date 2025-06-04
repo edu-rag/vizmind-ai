@@ -4,13 +4,12 @@ from fastapi import (
     UploadFile,
     HTTPException,
     Depends,
-    BackgroundTasks,
     Query,
 )
 from typing import List, Optional
 import uuid
 
-from app.core.config import settings, logger
+from app.core.config import logger
 from app.models.user_models import UserModelInDB
 from app.models.cmvs_models import (
     CMVSResponse,
@@ -20,7 +19,10 @@ from app.models.cmvs_models import (
 from app.api.v1.deps import get_current_active_user
 from app.services.pdf_service import extract_text_from_pdf_bytes
 from app.services.s3_service import S3Service
-from app.services.cmvs_service import get_rag_details_for_node, run_cmvs_pipeline
+from app.services.cmvs_service import (
+    get_node_details_with_rag,
+    run_cmvs_pipeline,
+)
 from app.langgraph_pipeline.state import GraphState
 
 
@@ -186,13 +188,9 @@ async def generate_concept_map_secure_endpoint(
     return MultipleCMVSResponse(results=results)
 
 
-@router.get(
-    "/details/", response_model=NodeDetailResponse, tags=["Maps"]
-)  # New path or updated old one
-async def get_node_details_rag_endpoint(  # Renamed endpoint function for clarity
-    concept_map_id: str = Query(
-        ..., description="The ID of the main concept map document."
-    ),
+@router.get("/details/", response_model=NodeDetailResponse, tags=["Maps"])
+async def get_node_details_rag_endpoint(
+    map_id: str = Query(..., description="The ID of the main concept map document."),
     node_query: str = Query(
         ..., description="The label/text of the tapped node (your question)."
     ),
@@ -205,43 +203,22 @@ async def get_node_details_rag_endpoint(  # Renamed endpoint function for clarit
     Retrieves a generated answer and source chunks for a given node query
     using RAG with MongoDB Atlas Vector Search.
     """
-    if not concept_map_id or not node_query:
+    if not map_id or not node_query:
         raise HTTPException(
             status_code=400, detail="concept_map_id and node_query are required."
         )
 
-    try:
-        # Call the new RAG service function
-        response = await get_rag_details_for_node(
-            concept_map_id=concept_map_id,
-            node_query=node_query,  # This is the "question"
-            user_id=current_user.id,
-            top_k_retriever=top_k,
-        )
+    response = await get_node_details_with_rag(
+        concept_map_id=map_id,
+        node_query=node_query,
+        user_id=current_user.id,
+        top_k_retriever=top_k,
+    )
 
-        if not response or (
-            not response.answer and not response.source_chunks
-        ):  # Check if response is minimal
-            # If the service returned a response with an error message in 'answer', it will be passed through.
-            # This specific check is more for if the service function itself returned None or an empty valid response.
-            return NodeDetailResponse(
-                query=node_query,
-                answer="Could not retrieve or generate information for this node.",
-                source_chunks=[],
-                message="No details found or an error occurred during processing.",
-            )
+    if (
+        "error occurred" in response.answer.lower()
+        or "critical error" in response.message.lower()
+    ):
+        pass
 
-        return response  # The service function now returns the full NodeDetailResponse
-
-    except Exception as e:  # Catch any unexpected errors from the service call itself
-        logger.error(
-            f"API Error in get_node_details_rag_endpoint for query '{node_query}', map '{concept_map_id}': {e}",
-            exc_info=True,
-        )
-        # Return a NodeDetailResponse compliant error structure
-        return NodeDetailResponse(
-            query=node_query,
-            answer=f"An internal server error occurred: {str(e)}",
-            source_chunks=[],
-            message="Failed to fetch node details due to a server error.",
-        )
+    return response
