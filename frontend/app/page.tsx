@@ -9,7 +9,8 @@ import {
   BookOpen,
   Sparkles,
   Brain,
-  Network
+  Network,
+  ExternalLink
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { FileDropZone } from '@/components/FileDropZone';
@@ -101,28 +102,44 @@ export default function Home() {
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
               {mapHistory.slice(0, 6).map((item) => (
-                <Link key={item.map_id} href={`/maps/${item.map_id}`}>
-                  <Card className="group hover:shadow-lg transition-all duration-200 cursor-pointer">
-                    <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                      <Network className="h-8 w-8 text-primary/60" />
-                    </div>
-
-                    <div className="p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary" className="text-xs">
-                          PDF
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </span>
+                <div key={item.map_id} className="relative group">
+                  <Link href={`/maps/${item.map_id}`}>
+                    <Card className="group hover:shadow-lg transition-all duration-200 cursor-pointer">
+                      <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                        <Network className="h-8 w-8 text-primary/60" />
                       </div>
 
-                      <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {item.source_filename.replace('.pdf', '')}
-                      </h3>
-                    </div>
-                  </Card>
-                </Link>
+                      <div className="p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="text-xs">
+                            PDF
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(item.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                          {item.source_filename.replace('.pdf', '')}
+                        </h3>
+                      </div>
+                    </Card>
+                  </Link>
+
+                  {/* Open in New Tab Button */}
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg h-8 w-8"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(`/maps/${item.map_id}`, '_blank');
+                    }}
+                    title="Open in new tab"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
               ))}
             </div>
 
@@ -137,6 +154,9 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      {/* Back to Top Button */}
+      <BackToTopButton />
     </div>
   );
 }

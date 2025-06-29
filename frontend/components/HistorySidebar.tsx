@@ -15,12 +15,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  FileText, 
-  LogOut, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  FileText,
+  LogOut,
   X,
   User,
   Settings,
@@ -49,7 +49,7 @@ export function HistorySidebar() {
     setCurrentMap,
     logout,
   } = useAppStore();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [hoveredMapId, setHoveredMapId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -72,7 +72,7 @@ export function HistorySidebar() {
 
   const loadHistory = async () => {
     if (!jwt) return;
-    
+
     setIsLoading(true);
     try {
       const result = await getMapHistory(jwt);
@@ -122,7 +122,7 @@ export function HistorySidebar() {
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.abs(now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffInHours < 168) { // 7 days
@@ -170,7 +170,7 @@ export function HistorySidebar() {
               </div>
             </Link>
           )}
-          
+
           <div className="flex items-center space-x-2 ml-auto">
             {/* Mobile close button */}
             {isMobile && (
@@ -184,7 +184,7 @@ export function HistorySidebar() {
                 <X className="h-5 w-5" />
               </Button>
             )}
-            
+
             {/* Desktop collapse toggle */}
             {!isMobile && (
               <Button
@@ -217,7 +217,7 @@ export function HistorySidebar() {
           >
             <Plus className="h-5 w-5" />
           </Button>
-          
+
           {isAuthenticated && user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -301,7 +301,7 @@ export function HistorySidebar() {
                       </h3>
                     </div>
                   </div>
-                  
+
                   <ScrollArea className="flex-1 px-4">
                     {isLoading ? (
                       <div className="space-y-3">
@@ -328,58 +328,72 @@ export function HistorySidebar() {
                     ) : (
                       <div className="space-y-3 pb-4">
                         {recentMaps.map((item, index) => (
-                          <Card
-                            key={item.map_id}
-                            className={cn(
-                              'p-4 cursor-pointer transition-all duration-200 touch-target group',
-                              'focus-visible-ring hover:shadow-md hover:scale-[1.02]',
-                              currentMap?.mongodb_doc_id === item.map_id 
-                                ? 'bg-primary/5 border-primary/20 shadow-sm' 
-                                : 'hover:bg-accent/50 border-border',
-                              hoveredMapId === item.map_id && 'shadow-lg'
-                            )}
-                            onClick={() => handleMapClick(item.map_id)}
-                            onMouseEnter={() => setHoveredMapId(item.map_id)}
-                            onMouseLeave={() => setHoveredMapId(null)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                handleMapClick(item.map_id);
-                              }
-                            }}
-                            aria-label={`Open map: ${item.source_filename}`}
-                          >
-                            <div className="flex items-start space-x-3">
-                              <div className={cn(
-                                'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
+                          <div key={item.map_id} className="relative group">
+                            <Card
+                              className={cn(
+                                'p-4 cursor-pointer transition-all duration-200 touch-target group',
+                                'focus-visible-ring hover:shadow-md hover:scale-[1.02]',
                                 currentMap?.mongodb_doc_id === item.map_id
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'bg-muted group-hover:bg-primary/10'
-                              )}>
-                                <FileText className="h-5 w-5" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-responsive-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                  {item.source_filename.replace('.pdf', '')}
-                                </p>
-                                <div className="flex items-center space-x-2 mt-1">
-                                  <p className="text-responsive-xs text-muted-foreground">
-                                    {formatDate(item.created_at)}
+                                  ? 'bg-primary/5 border-primary/20 shadow-sm'
+                                  : 'hover:bg-accent/50 border-border',
+                                hoveredMapId === item.map_id && 'shadow-lg'
+                              )}
+                              onClick={() => handleMapClick(item.map_id)}
+                              onMouseEnter={() => setHoveredMapId(item.map_id)}
+                              onMouseLeave={() => setHoveredMapId(null)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  handleMapClick(item.map_id);
+                                }
+                              }}
+                              aria-label={`Open map: ${item.source_filename}`}
+                            >
+                              <div className="flex items-start space-x-3">
+                                <div className={cn(
+                                  'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
+                                  currentMap?.mongodb_doc_id === item.map_id
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted group-hover:bg-primary/10'
+                                )}>
+                                  <FileText className="h-5 w-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-responsive-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                                    {item.source_filename.replace('.pdf', '')}
                                   </p>
-                                  {index === 0 && (
-                                    <span className="text-responsive-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                      Latest
-                                    </span>
-                                  )}
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <p className="text-responsive-xs text-muted-foreground">
+                                      {formatDate(item.created_at)}
+                                    </p>
+                                    {index === 0 && (
+                                      <span className="text-responsive-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                        Latest
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                            </div>
-                          </Card>
+                            </Card>
+
+                            {/* Open in New Tab Button */}
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-sm h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`/maps/${item.map_id}`, '_blank');
+                              }}
+                              title="Open in new tab"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </div>
                         ))}
-                        
+
                         {mapHistory.length > 4 && (
                           <Button
                             variant="ghost"
