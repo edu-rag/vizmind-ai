@@ -38,7 +38,7 @@ except Exception as e:
 # Initialize LLM
 try:
     llm_instance = ChatGroq(
-        temperature=0.3,  # Slightly higher temperature for more detailed and natural responses
+        temperature=0.1,
         groq_api_key=settings.GROQ_API_KEY,
         model_name=settings.LLM_MODEL_NAME_GROQ,
     )
