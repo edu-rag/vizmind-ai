@@ -507,7 +507,7 @@ export function HistorySidebar() {
                           </div>
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="top" className="w-64 mb-2">
+                      <DropdownMenuContent side="top" className="w-[306px] mb-4">
                         <div className="px-3 py-2">
                           <div className="flex items-center space-x-3">
                             <Avatar className="h-10 w-10">
