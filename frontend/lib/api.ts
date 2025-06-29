@@ -56,10 +56,12 @@ export const authenticateWithGoogle = async (googleIdToken: string) => {
 };
 
 // Generate concept map
-export const generateConceptMap = async (file: File, jwt: string) => {
+export const generateConceptMap = async (files: File[], jwt: string) => {
   try {
     const formData = new FormData();
-    formData.append('files', file);
+    files.forEach(file => {
+      formData.append('files', file);
+    });
 
     const response = await fetch(`${API_BASE_URL}/api/v1/maps/generate/`, {
       method: 'POST',

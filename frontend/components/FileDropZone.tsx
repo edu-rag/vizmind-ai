@@ -84,6 +84,119 @@ export function FileDropZone() {
     },
   ];
 
+  const addFilesAsPending = (files: File[]) => {
+    const newFiles: UploadedFile[] = files.map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
+      file,
+      status: 'pending' as const,
+      progress: 0,
+    }));
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const processBatchFiles = async (files: File[]) => {
+    if (!jwt) return;
+
+    // Create uploadedFile entries for all files
+    const newFiles: UploadedFile[] = files.map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
+      file,
+      status: 'processing' as const,
+      progress: 0,
+    }));
+
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+    setIsProcessing(true);
+
+    // Simulate upload progress for all files
+    const progressInterval = setInterval(() => {
+      setUploadedFiles(prev => prev.map(f =>
+        newFiles.some(nf => nf.id === f.id)
+          ? { ...f, progress: Math.min(f.progress + Math.random() * 15 + 5, 90) }
+          : f
+      ));
+    }, 500);
+
+    try {
+      toast.success(`Processing ${files.length} PDF${files.length > 1 ? 's' : ''}...`, {
+        description: 'Creating unified concept map',
+      });
+
+      const result = await generateConceptMap(files, jwt);
+
+      clearInterval(progressInterval);
+
+      if (result.error) {
+        setUploadedFiles(prev => prev.map(f =>
+          newFiles.some(nf => nf.id === f.id)
+            ? { ...f, status: 'error', progress: 0, error: 'Processing failed' }
+            : f
+        ));
+        toast.error('Failed to process PDFs');
+        return;
+      }
+
+      if (result.data) {
+        const mapData = result.data;
+
+        if (mapData.status === 'success') {
+          setUploadedFiles(prev => prev.map(f =>
+            newFiles.some(nf => nf.id === f.id)
+              ? { ...f, status: 'completed', progress: 100 }
+              : f
+          ));
+
+          // Create title from attachments
+          const attachmentNames = mapData.attachments?.map((att: any) => att.filename) || [];
+          const title = attachmentNames.length > 1
+            ? `${attachmentNames[0]} + ${attachmentNames.length - 1} more`
+            : attachmentNames[0] || 'Unified Concept Map';
+
+          const newMap = {
+            mongodb_doc_id: mapData.mongodb_doc_id,
+            react_flow_data: mapData.react_flow_data,
+            source_filename: title,
+            attachments: mapData.attachments,
+          };
+
+          setCurrentMap(newMap);
+
+          addToHistory({
+            map_id: mapData.mongodb_doc_id,
+            source_filename: title,
+            created_at: new Date().toISOString(),
+            attachments: mapData.attachments,
+          });
+
+          if (mapData.mongodb_doc_id) {
+            router.push(`/maps/${mapData.mongodb_doc_id}`);
+            toast.success('Concept map created successfully!');
+          }
+        } else {
+          setUploadedFiles(prev => prev.map(f =>
+            newFiles.some(nf => nf.id === f.id)
+              ? { ...f, status: 'error', progress: 0, error: mapData.error_message || 'Processing failed' }
+              : f
+          ));
+          toast.error('Failed to create concept map', {
+            description: mapData.error_message,
+          });
+        }
+      }
+    } catch (error) {
+      clearInterval(progressInterval);
+      setUploadedFiles(prev => prev.map(f =>
+        newFiles.some(nf => nf.id === f.id)
+          ? { ...f, status: 'error', progress: 0, error: 'Network error' }
+          : f
+      ));
+      toast.error('Network error occurred');
+      console.error('Error processing files:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const processFile = async (file: File) => {
     if (!jwt) return;
 
@@ -114,7 +227,7 @@ export function FileDropZone() {
         description: 'Creating interactive concept map',
       });
 
-      const result = await generateConceptMap(file, jwt);
+      const result = await generateConceptMap([file], jwt);
 
       clearInterval(progressInterval);
 
@@ -197,14 +310,17 @@ export function FileDropZone() {
       });
     });
 
-    // Process accepted files
-    acceptedFiles.forEach(file => {
+    // Add accepted files as pending, let user decide when to process
+    if (acceptedFiles.length > 0) {
       if (!isAuthenticated) {
         setShowAuthDialog(true);
         return;
       }
-      processFile(file);
-    });
+      addFilesAsPending(acceptedFiles);
+      toast.success(`Added ${acceptedFiles.length} file${acceptedFiles.length > 1 ? 's' : ''} to queue`, {
+        description: 'Click "Process All" to create your concept map',
+      });
+    }
   }, [isAuthenticated]);
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
@@ -374,7 +490,7 @@ export function FileDropZone() {
                   <p className="text-sm md:text-base text-muted-foreground max-w-md mx-auto">
                     {isDragReject
                       ? 'Only PDF files up to 10MB are supported'
-                      : 'Drag and drop your PDF files here, or click to browse. Support for multiple files.'
+                      : 'Upload multiple PDFs to create a unified concept map. All documents will be analyzed together to find connections and relationships across your content.'
                     }
                   </p>
                 </div>
@@ -409,14 +525,34 @@ export function FileDropZone() {
                 <h4 className="text-lg font-semibold text-foreground">
                   Uploaded Files ({uploadedFiles.length})
                 </h4>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setUploadedFiles([])}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Clear All
-                </Button>
+                <div className="flex gap-2">
+                  {uploadedFiles.some(f => f.status === 'pending') && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => {
+                        const pendingFiles = uploadedFiles
+                          .filter(f => f.status === 'pending')
+                          .map(f => f.file);
+                        if (pendingFiles.length > 0) {
+                          processBatchFiles(pendingFiles);
+                        }
+                      }}
+                      disabled={isProcessing}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      Process All ({uploadedFiles.filter(f => f.status === 'pending').length})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUploadedFiles([])}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Clear All
+                  </Button>
+                </div>
               </div>
 
               <ScrollArea className="max-h-64">

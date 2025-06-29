@@ -8,10 +8,18 @@ export interface User {
   picture: string;
 }
 
+export interface AttachmentInfo {
+  filename: string;
+  s3_path?: string;
+  status: string;
+  error_message?: string;
+}
+
 export interface MapHistoryItem {
   map_id: string;
   source_filename: string;
   created_at: string;
+  attachments?: AttachmentInfo[];
 }
 
 export interface ReactFlowData {

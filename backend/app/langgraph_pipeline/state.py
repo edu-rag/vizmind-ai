@@ -5,13 +5,20 @@ from langchain_core.documents import Document
 class EmbeddedChunk(TypedDict):
     text: str
     embedding: List[float]
+    source_filename: Optional[str]  # Track which file this chunk came from
+    source_s3_path: Optional[str]  # Track the S3 path of the source file
+
+
+class AttachmentInfo(TypedDict):
+    filename: str
+    s3_path: Optional[str]
+    extracted_text: str
 
 
 class GraphState(TypedDict):
     # Input states
-    original_text: str
-    current_filename: Optional[str]
-    s3_path: Optional[str]
+    original_text: str  # Combined text from all files
+    attachments: List[AttachmentInfo]  # Information about all uploaded files
     user_id: Optional[str]  # User's MongoDB ID
 
     # Intermediate and output states

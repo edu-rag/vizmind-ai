@@ -77,7 +77,7 @@ class S3Service:
             object_name: The desired object name (key) in the S3 bucket (e.g., "uploads/myfile.pdf").
 
         Returns:
-            The S3 path (s3://bucket/object_name) if successful, None otherwise.
+            The public HTTPS URL to access the file if successful, None otherwise.
         """
         if not self.is_configured():
             logger.warning(
@@ -99,8 +99,8 @@ class S3Service:
                 # ExtraArgs={'ACL': 'private'} # Or 'public-read' if needed
             )
 
-            s3_path = f"s3://{settings.S3_BUCKET_NAME}/{object_name}"
-            logger.info(f"File uploaded successfully to S3: {s3_path}")
+            s3_path = self._generate_public_url(object_name)
+            logger.info(f"File uploaded successfully to S3, public URL: {s3_path}")
             return s3_path
         except ClientError as e:
             logger.error(f"S3 Upload ClientError for object '{object_name}': {e}")
@@ -111,3 +111,68 @@ class S3Service:
                 exc_info=True,
             )
             return None
+
+    def _generate_public_url(self, object_name: str) -> str:
+        """
+        Generates a public URL for the given object name.
+        This handles different S3-compatible services including Cloudflare R2.
+
+        Args:
+            object_name: The object key in the S3 bucket
+
+        Returns:
+            Public HTTPS URL to access the file
+        """
+        # Check if we have a custom public domain configured (recommended)
+        if hasattr(settings, "S3_PUBLIC_DOMAIN") and settings.S3_PUBLIC_DOMAIN:
+            public_domain = (
+                settings.S3_PUBLIC_DOMAIN.replace("https://", "")
+                .replace("http://", "")
+                .rstrip("/")
+            )
+            return f"https://{public_domain}/{object_name}"
+
+        # If endpoint URL is provided and doesn't look like standard AWS S3
+        if settings.S3_ENDPOINT_URL and not settings.S3_ENDPOINT_URL.endswith(
+            "amazonaws.com"
+        ):
+            # Remove the protocol and any trailing slashes from endpoint URL
+            base_url = (
+                settings.S3_ENDPOINT_URL.replace("https://", "")
+                .replace("http://", "")
+                .rstrip("/")
+            )
+
+            # If it's a Cloudflare R2 URL pattern, extract the domain
+            if ".r2.cloudflarestorage.com" in base_url:
+                # For Cloudflare R2, we need the actual public domain which is different from the API endpoint
+                # The public domain format is typically: pub-{hash}.r2.dev
+                # Since we can't determine this automatically, log a warning and use a fallback
+                logger.warning(
+                    "Cloudflare R2 detected but S3_PUBLIC_DOMAIN not configured. "
+                    "Please set S3_PUBLIC_DOMAIN in your environment to the actual public domain "
+                    "(e.g., 'pub-12345.r2.dev') for correct URL generation."
+                )
+                # Extract account ID as fallback (may not work for actual file access)
+                account_id = base_url.split(".")[0]
+                return f"https://{account_id}.r2.dev/{object_name}"
+            else:
+                # For other S3-compatible services, try direct public access
+                return f"https://{base_url}/{object_name}"
+        else:
+            # Standard AWS S3 public URL format
+            region = getattr(settings, "S3_REGION_NAME", "us-east-1")
+            return f"https://{settings.S3_BUCKET_NAME}.s3.{region}.amazonaws.com/{object_name}"
+
+    def get_public_url(self, object_name: str) -> str:
+        """
+        Public method to get the public URL for an object without uploading.
+        Useful for testing or getting URLs for existing objects.
+
+        Args:
+            object_name: The object key in the S3 bucket
+
+        Returns:
+            Public HTTPS URL to access the file
+        """
+        return self._generate_public_url(object_name)

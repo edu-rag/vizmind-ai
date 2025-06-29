@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     S3_SECRET_ACCESS_KEY: str
     S3_ENDPOINT_URL: str
     S3_BUCKET_NAME: str
+    S3_PUBLIC_DOMAIN: str
 
     # JWT Authentication
     JWT_SECRET_KEY: str
@@ -39,26 +40,26 @@ class Settings(BaseSettings):
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str
-    
+
     # Tavily Search
     TAVILY_API_KEY: Optional[str] = None
-    
+
     # RAG (Retrieval-Augmented Generation) Settings
     RAG_VERIFIED_DOMAINS: List[str] = [
         "wikipedia.org",
-        "arxiv.org",       # For pre-print scientific papers
-        "nature.com",      # Nature journal
-        "science.org",     # Science journal (AAAS)
-        "cell.com",        # Cell Press journals
-        "pubmed.ncbi.nlm.nih.gov", # PubMed Central for biomedical literature
-        "thelancet.com",   # The Lancet journals
-        "jamanetwork.com", # JAMA Network journals
-        "nejm.org",        # New England Journal of Medicine
-        "bmj.com",         # BMJ journals
-        "plos.org",        # PLOS journals
-        "springer.com",    # Springer Nature publisher (includes many journals)
-        "ieeexplore.ieee.org", # IEEE Xplore for engineering
-        "dl.acm.org",      # ACM Digital Library for computing
+        "arxiv.org",  # For pre-print scientific papers
+        "nature.com",  # Nature journal
+        "science.org",  # Science journal (AAAS)
+        "cell.com",  # Cell Press journals
+        "pubmed.ncbi.nlm.nih.gov",  # PubMed Central for biomedical literature
+        "thelancet.com",  # The Lancet journals
+        "jamanetwork.com",  # JAMA Network journals
+        "nejm.org",  # New England Journal of Medicine
+        "bmj.com",  # BMJ journals
+        "plos.org",  # PLOS journals
+        "springer.com",  # Springer Nature publisher (includes many journals)
+        "ieeexplore.ieee.org",  # IEEE Xplore for engineering
+        "dl.acm.org",  # ACM Digital Library for computing
         # Add other reputable academic publishers, university repositories, or specific journals
     ]
 

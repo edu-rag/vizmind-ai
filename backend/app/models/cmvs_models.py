@@ -19,10 +19,17 @@ class ExtractedTriplesLLM(BaseModel):  # Renamed
 
 
 # --- API Response Models ---
-class CMVSResponse(BaseModel):
+class AttachmentInfo(BaseModel):
     filename: str
-    status: str
     s3_path: Optional[str] = None
+    status: str  # "success" or "error"
+    error_message: Optional[str] = None
+
+
+class CMVSResponse(BaseModel):
+    # For single concept map with multiple attachments
+    attachments: List[AttachmentInfo]
+    status: str
     react_flow_data: Optional[Dict[str, Any]] = None
     processed_triples: Optional[List[Dict[str, str]]] = None  # Triples after processing
     mongodb_doc_id: Optional[str] = None  # Main CMVS doc ID
@@ -32,8 +39,13 @@ class CMVSResponse(BaseModel):
 
 # --- Multiple CMVS Response Model ---
 class MultipleCMVSResponse(BaseModel):
-    results: List[CMVSResponse]
+    results: List[CMVSResponse]  # Keep for backward compatibility
     overall_errors: Optional[List[str]] = None  # For errors not tied to a specific file
+
+
+# --- Single Unified CMVS Response Model ---
+class UnifiedCMVSResponse(BaseModel):
+    concept_map: CMVSResponse
 
 
 class RetrievedChunk(BaseModel):

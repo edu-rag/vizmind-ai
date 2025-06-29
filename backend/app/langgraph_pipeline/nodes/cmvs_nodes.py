@@ -2,11 +2,12 @@ import asyncio
 import numpy as np
 import json
 import re
+import datetime
 from typing import List, Dict, Any, Optional
 
 # Langchain & supporting libs
 from langchain_groq import ChatGroq
-from langchain_experimental.text_splitter import SemanticChunker  # Corrected import
+from langchain_experimental.text_splitter import SemanticChunker
 from langchain_huggingface import (
     HuggingFaceEmbeddings,
 )
@@ -152,8 +153,10 @@ class CMVSNodes:
         return triples
 
     async def chunk_text(self, state: GraphState) -> Dict[str, Any]:
+        attachments = state.get("attachments", [])
+        attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Chunking Text (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Chunking Text (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             text = state["original_text"]
@@ -164,7 +167,9 @@ class CMVSNodes:
                     "embedded_chunks": [],  # Ensure this is initialized
                 }
             chunks = await asyncio.to_thread(self.text_splitter.split_text, text)
-            logger.info(f"Text chunked into {len(chunks)} parts.")
+            logger.info(
+                f"Text chunked into {len(chunks)} parts from {len(attachments)} attachment(s)."
+            )
             return {
                 "text_chunks": chunks,
                 "error_message": None,
@@ -179,8 +184,10 @@ class CMVSNodes:
             }
 
     async def embed_text_chunks(self, state: GraphState) -> Dict[str, Any]:
+        attachments = state.get("attachments", [])
+        attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Embedding Text Chunks (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Embedding Text Chunks (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             text_chunks = state.get("text_chunks")
@@ -193,12 +200,52 @@ class CMVSNodes:
             embeddings_list = await asyncio.to_thread(
                 self.embedding_model_lc.embed_documents, text_chunks
             )
-            embedded_chunks_data: List[EmbeddedChunk] = [
-                EmbeddedChunk(text=chunk_text, embedding=embeddings_list[i])
-                for i, chunk_text in enumerate(text_chunks)
-            ]
+
+            # Determine source file for each chunk by analyzing the text content
+            embedded_chunks_data: List[EmbeddedChunk] = []
+            for i, chunk_text in enumerate(text_chunks):
+                # Try to determine which attachment this chunk came from
+                source_filename = None
+                source_s3_path = None
+
+                # Look for document separator patterns in the chunk
+                for attachment in attachments:
+                    filename = attachment.get("filename", "")
+                    if f"--- Document: {filename} ---" in chunk_text:
+                        source_filename = filename
+                        source_s3_path = attachment.get("s3_path")
+                        break
+
+                # If we can't determine from separator, try to match against original text segments
+                if not source_filename and attachments:
+                    # For chunks that don't contain separators, try to match against attachment texts
+                    chunk_clean = chunk_text.replace(f"--- Document:", "").strip()
+                    max_overlap = 0
+                    best_match = None
+
+                    for attachment in attachments:
+                        attachment_text = attachment.get("extracted_text", "")
+                        if attachment_text and chunk_clean in attachment_text:
+                            overlap = len(chunk_clean)
+                            if overlap > max_overlap:
+                                max_overlap = overlap
+                                best_match = attachment
+
+                    if best_match:
+                        source_filename = best_match.get("filename")
+                        source_s3_path = best_match.get("s3_path")
+
+                embedded_chunks_data.append(
+                    EmbeddedChunk(
+                        text=chunk_text,
+                        embedding=embeddings_list[i],
+                        source_filename=source_filename,
+                        source_s3_path=source_s3_path,
+                    )
+                )
+
             logger.info(
-                f"Successfully embedded {len(embedded_chunks_data)} text chunks."
+                f"Successfully embedded {len(embedded_chunks_data)} text chunks from {len(attachments)} attachment(s)."
             )
             return {"embedded_chunks": embedded_chunks_data}
         except Exception as e:
@@ -211,8 +258,10 @@ class CMVSNodes:
     async def extract_main_concept_map(
         self, state: GraphState
     ) -> Dict[str, Any]:  # RENAMED & MODIFIED
+        attachments = state.get("attachments", [])
+        attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Extracting Main Concept Map (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Extracting Main Concept Map (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             full_text = state["original_text"]
@@ -222,21 +271,18 @@ class CMVSNodes:
                     "error_message": "Original text is empty for main concept map extraction.",
                 }
 
-            # Adjust prompt for high-level mind map of main ideas
-            # Max length consideration for the prompt might be needed for very long documents.
-            # If text is too long, consider sending a summary or first N words.
-            # For now, assume full_text is manageable.
-            # You might want to truncate full_text if it's extremely long:
-            # MAX_TEXT_LENGTH_FOR_LLM = 15000 # Example character limit for context
-            # if len(full_text) > MAX_TEXT_LENGTH_FOR_LLM:
-            #    logger.warning(f"Full text too long ({len(full_text)} chars), truncating for main map LLM prompt.")
-            #    full_text = full_text[:MAX_TEXT_LENGTH_FOR_LLM] + "..."
+            # Adjust prompt for high-level mind map of main ideas from multiple documents
+            document_context = ""
+            if len(attachments) > 1:
+                document_context = f"\n\nNote: This analysis combines content from {len(attachments)} documents: {', '.join(attachment_names)}. Focus on finding connections and relationships between concepts across all documents."
+            elif len(attachments) == 1:
+                document_context = f"\n\nNote: This analysis is based on the document: {attachment_names[0]}."
 
-            prompt = f"""Please analyze the following document and generate a high-level concept map that outlines its main ideas, core arguments, and overall structure.
+            prompt = f"""Please analyze the following document(s) and generate a high-level concept map that outlines the main ideas, core arguments, and overall structure.
 Focus on creating a 'mind map' style overview, not a detailed, granular breakdown of every piece of information.
-Extract between 5 to 15 key concepts and their primary relationships to represent the document's essence.
+Extract between 5 to 15 key concepts and their primary relationships to represent the essence of the content.
 Avoid including minor details, specific examples from the text, or overly granular sub-points in THIS main map.
-The goal is a concise overview that a user can explore, with details to be fetched later.
+The goal is a concise overview that a user can explore, with details to be fetched later.{document_context}
 
 Document Text:
 ---
@@ -332,8 +378,10 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
     async def process_graph_data(self, state: GraphState) -> Dict[str, Any]:
         # This node remains largely the same, processing the `raw_triples`
         # which are now from the main concept map extraction.
+        attachments = state.get("attachments", [])
+        attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Processing Graph Data for Main Map (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Processing Graph Data for Main Map (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
 
         # Ensure it uses normalize_label from app.utils.cmvs_helpers
@@ -427,8 +475,10 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
             return {"error_message": str(e), "processed_triples": []}
 
     async def generate_react_flow(self, state: GraphState) -> Dict[str, Any]:
+        attachments = state.get("attachments", [])
+        attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Generating React Flow Data for Main Map (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Generating React Flow Data for Main Map (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             processed_triples = state.get("processed_triples", [])
@@ -451,15 +501,16 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
             }
 
     async def store_cmvs_data_in_mongodb(self, state: GraphState) -> Dict[str, Any]:
+        attachments = state.get("attachments", [])
+        attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Storing Main Map & All Chunks in MongoDB (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Storing Main Map & All Chunks in MongoDB (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             processed_triples = state.get("processed_triples", [])
             user_id = state.get("user_id")
             embedded_chunks = state.get("embedded_chunks", [])
             original_text = state.get("original_text", "")
-            s3_path = state.get("s3_path")
             react_flow_data = state.get("react_flow_data")
 
             if not processed_triples and not embedded_chunks:
@@ -486,10 +537,23 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
                 stored_chunk_ids_obj = []
 
                 if processed_triples:
+                    # Create a unified title from all attachments
+                    unified_title = ", ".join(
+                        [att.get("filename", "Unknown") for att in attachments]
+                    )
+                    if len(unified_title) > 100:  # Truncate if too long
+                        unified_title = unified_title[:97] + "..."
+
                     main_doc_to_insert = {
                         "user_id": user_id,
-                        "original_filename": state.get("current_filename", "N/A"),
-                        "s3_path": s3_path,
+                        "unified_title": unified_title,
+                        "attachments": [
+                            {
+                                "filename": att.get("filename", "Unknown"),
+                                "s3_path": att.get("s3_path"),
+                            }
+                            for att in attachments
+                        ],
                         "original_text_snippet": original_text[:500]
                         + ("..." if len(original_text) > 500 else ""),
                         "triples": processed_triples,
@@ -510,10 +574,8 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
                                 "user_id": user_id,
                                 "text": emb_chunk["text"],
                                 "embedding": emb_chunk["embedding"],
-                                "s3_path_source_pdf": s3_path,
-                                "original_filename_source_pdf": state.get(
-                                    "current_filename", "N/A"
-                                ),
+                                "source_filename": emb_chunk.get("source_filename"),
+                                "source_s3_path": emb_chunk.get("source_s3_path"),
                                 "created_at": datetime.datetime.now(UTC),
                             }
                         )

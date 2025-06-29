@@ -15,6 +15,7 @@ from app.models.cmvs_models import (
     CMVSResponse,
     MultipleCMVSResponse,
     NodeDetailResponse,
+    AttachmentInfo,
 )
 from app.api.v1.deps import get_current_active_user
 from app.services.pdf_service import extract_text_from_pdf_bytes
@@ -48,22 +49,39 @@ async def get_map_history_endpoint(
         # Find all concept maps for the current user
         maps_cursor = cm_collection.find(
             {"user_id": current_user.id},
-            {"_id": 1, "original_filename": 1, "created_at": 1, "s3_path": 1},
+            {
+                "_id": 1,
+                "unified_title": 1,
+                "original_filename": 1,
+                "attachments": 1,
+                "created_at": 1,
+            },
         ).sort(
             "created_at", -1
         )  # Most recent first
 
         history = []
         for map_doc in maps_cursor:
+            # Support both new unified structure and legacy single file structure
+            if "unified_title" in map_doc:
+                title = map_doc["unified_title"]
+            elif "original_filename" in map_doc:
+                title = map_doc["original_filename"]
+            else:
+                title = "Unknown"
+
             history.append(
                 {
                     "map_id": str(map_doc["_id"]),
-                    "source_filename": map_doc.get("original_filename", "Unknown"),
+                    "source_filename": title,
                     "created_at": (
                         map_doc.get("created_at").isoformat()
                         if map_doc.get("created_at")
                         else None
                     ),
+                    "attachments": map_doc.get(
+                        "attachments", []
+                    ),  # Include attachment info
                 }
             )
 
@@ -138,21 +156,25 @@ async def get_concept_map_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/generate/", response_model=MultipleCMVSResponse)
+@router.post("/generate/", response_model=CMVSResponse)
 async def generate_concept_map_secure_endpoint(
     files: List[UploadFile] = File(
-        ..., description="One or more PDF files to process."
+        ..., description="One or more PDF files to process as a single concept map."
     ),
     current_user: UserModelInDB = Depends(get_current_active_user),
 ):
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
-    results = []
+    attachments = []
+    combined_text = ""
+    attachment_infos = []
+
     logger.info(
-        f"User '{current_user.email}' (ID: {current_user.id}) initiated CMVS generation for {len(files)} file(s)."
+        f"User '{current_user.email}' (ID: {current_user.id}) initiated unified CMVS generation for {len(files)} file(s)."
     )
 
+    # Process all files first to extract text and upload to S3
     for uploaded_file in files:
         s3_file_path: Optional[str] = None
         filename = (
@@ -162,11 +184,11 @@ async def generate_concept_map_secure_endpoint(
         )
 
         if uploaded_file.content_type != "application/pdf":
-            results.append(
-                CMVSResponse(
+            attachments.append(
+                AttachmentInfo(
                     filename=filename,
                     status="error",
-                    error_message="Invalid file type. Only PDF.",
+                    error_message="Invalid file type. Only PDF files are supported.",
                 )
             )
             logger.warning(
@@ -196,104 +218,117 @@ async def generate_concept_map_secure_endpoint(
                 )
 
             # Text Extraction
-            extracted_text = await extract_text_from_pdf_bytes(
-                pdf_bytes
-            )  # Using the service
+            extracted_text = await extract_text_from_pdf_bytes(pdf_bytes)
             if not extracted_text.strip():
                 logger.warning(
                     f"No text extracted from PDF '{filename}' for user '{current_user.email}'."
                 )
-                results.append(
-                    CMVSResponse(
+                attachments.append(
+                    AttachmentInfo(
                         filename=filename,
-                        status="error",
                         s3_path=s3_file_path,
+                        status="error",
                         error_message="No text extracted from PDF.",
                     )
                 )
                 continue
 
-            # LangGraph Pipeline Invocation via CMVS Service
-            initial_state = GraphState(
-                original_text=extracted_text,
-                text_chunks=[],
-                embedded_chunks=[],
-                raw_triples=[],
-                processed_triples=[],
-                react_flow_data={},
-                mongodb_doc_id=None,
-                mongodb_chunk_ids=[],
-                error_message=None,
-                current_filename=filename,
-                s3_path=s3_file_path,
-                user_id=current_user.id,  # Pass authenticated user's MongoDB ID
-            )
-
-            final_graph_state_dict = await run_cmvs_pipeline(initial_state)
-
-            if final_graph_state_dict.get("error_message"):
-                logger.error(
-                    f"Pipeline error for '{filename}', user '{current_user.email}': {final_graph_state_dict['error_message']}"
-                )
-                results.append(
-                    CMVSResponse(
-                        filename=filename,
-                        status="error",
-                        s3_path=s3_file_path,
-                        error_message=final_graph_state_dict["error_message"],
-                    )
-                )
+            # Add separator between documents if we have multiple files
+            if combined_text:
+                combined_text += f"\n\n--- Document: {filename} ---\n\n"
             else:
-                logger.info(
-                    f"Successfully processed '{filename}' for user '{current_user.email}'."
-                )
-                results.append(
-                    CMVSResponse(
-                        filename=filename,
-                        status="success",
-                        s3_path=s3_file_path,
-                        react_flow_data=final_graph_state_dict.get("react_flow_data"),
-                        processed_triples=final_graph_state_dict.get(
-                            "processed_triples"
-                        ),
-                        mongodb_doc_id=final_graph_state_dict.get("mongodb_doc_id"),
-                        mongodb_chunk_ids=final_graph_state_dict.get(
-                            "mongodb_chunk_ids"
-                        ),
-                    )
-                )
-        except HTTPException as http_exc:
-            logger.error(
-                f"HTTPException during processing for '{filename}', user '{current_user.email}': {http_exc.detail}",
-                exc_info=True,
+                combined_text += f"--- Document: {filename} ---\n\n"
+
+            combined_text += extracted_text
+
+            # Store attachment info for the graph state
+            attachment_infos.append(
+                {
+                    "filename": filename,
+                    "s3_path": s3_file_path,
+                    "extracted_text": extracted_text,
+                }
             )
-            results.append(
-                CMVSResponse(
-                    filename=filename, status="error", error_message=http_exc.detail
+
+            attachments.append(
+                AttachmentInfo(
+                    filename=filename,
+                    s3_path=s3_file_path,
+                    status="success",
                 )
             )
+
         except Exception as e:
             logger.error(
-                f"Unhandled error processing file '{filename}' for user '{current_user.email}': {e}",
+                f"Error processing file '{filename}' for user '{current_user.email}': {e}",
                 exc_info=True,
             )
-            results.append(
-                CMVSResponse(
+            attachments.append(
+                AttachmentInfo(
                     filename=filename,
+                    s3_path=s3_file_path,
                     status="error",
-                    error_message=f"Unexpected server error: {str(e)}",
+                    error_message=str(e),
                 )
             )
-        finally:
-            if (
-                uploaded_file
-                and hasattr(uploaded_file, "file")
-                and uploaded_file.file
-                and not uploaded_file.file.closed
-            ):
-                await uploaded_file.close()
 
-    return MultipleCMVSResponse(results=results)
+    # Check if we have any successfully processed files
+    successful_attachments = [att for att in attachments if att.status == "success"]
+    if not successful_attachments:
+        return CMVSResponse(
+            attachments=attachments,
+            status="error",
+            error_message="No files were successfully processed.",
+        )
+
+    # Run the unified pipeline with combined text
+    try:
+        initial_state = GraphState(
+            original_text=combined_text,
+            attachments=attachment_infos,
+            user_id=current_user.id,
+            text_chunks=[],
+            embedded_chunks=[],
+            raw_triples=[],
+            processed_triples=[],
+            react_flow_data={},
+            mongodb_doc_id=None,
+            mongodb_chunk_ids=[],
+            error_message=None,
+        )
+
+        final_graph_state_dict = await run_cmvs_pipeline(initial_state)
+
+        if final_graph_state_dict.get("error_message"):
+            logger.error(
+                f"Pipeline error for unified concept map, user '{current_user.email}': {final_graph_state_dict['error_message']}"
+            )
+            return CMVSResponse(
+                attachments=attachments,
+                status="error",
+                error_message=final_graph_state_dict["error_message"],
+            )
+        else:
+            logger.info(
+                f"Successfully processed unified concept map for user '{current_user.email}' with {len(successful_attachments)} files."
+            )
+            return CMVSResponse(
+                attachments=attachments,
+                status="success",
+                react_flow_data=final_graph_state_dict.get("react_flow_data"),
+                processed_triples=final_graph_state_dict.get("processed_triples"),
+                mongodb_doc_id=final_graph_state_dict.get("mongodb_doc_id"),
+                mongodb_chunk_ids=final_graph_state_dict.get("mongodb_chunk_ids"),
+            )
+
+    except Exception as e:
+        logger.error(
+            f"Unhandled error in unified pipeline for user '{current_user.email}': {e}",
+            exc_info=True,
+        )
+        return CMVSResponse(
+            attachments=attachments, status="error", error_message=str(e)
+        )
 
 
 @router.get("/details/", response_model=NodeDetailResponse, tags=["Maps"])
