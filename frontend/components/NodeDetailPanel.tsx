@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -25,11 +25,21 @@ export function NodeDetailPanel() {
   } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [citedSources, setCitedSources] = useState<any[]>([]);
+  const [initialAnswer, setInitialAnswer] = useState<string | null>(null);
+  const [initialCitedSources, setInitialCitedSources] = useState<any[]>([]);
+  const [conversation, setConversation] = useState<Array<{
+    id: string;
+    type: 'question' | 'answer';
+    content: string;
+    citedSources?: any[];
+    timestamp: Date;
+  }>>([]);
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
+  const questionInputRef = useRef<HTMLInputElement>(null);
+  const isLoadingRef = useRef(false);
 
   const selectedNodeData = currentMap?.react_flow_data.nodes.find(
     (node) => node.id === selectedNode
@@ -45,16 +55,10 @@ export function NodeDetailPanel() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  useEffect(() => {
-    if (selectedNode && selectedNodeData && currentMap && jwt) {
-      // Auto-fetch node details using the /details endpoint
-      handleGetNodeDetails();
-    }
-  }, [selectedNode, selectedNodeData, currentMap, jwt]);
+  const handleGetNodeDetails = useCallback(async () => {
+    if (!currentMap || !jwt || !selectedNodeData || isLoadingRef.current) return;
 
-  const handleGetNodeDetails = async () => {
-    if (!currentMap || !jwt || !selectedNodeData) return;
-
+    isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
@@ -65,8 +69,8 @@ export function NodeDetailPanel() {
       );
 
       if (result.data) {
-        setAnswer(result.data.answer);
-        setCitedSources(result.data.cited_sources || []);
+        setInitialAnswer(result.data.answer);
+        setInitialCitedSources(result.data.cited_sources || []);
       } else {
         toast.error('Failed to get node details');
       }
@@ -74,12 +78,61 @@ export function NodeDetailPanel() {
       toast.error('Failed to fetch node details');
       console.error('Node details error:', error);
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  };
+  }, [currentMap, jwt, selectedNodeData]);
 
-  const handleAskQuestion = async (questionText: string) => {
+  useEffect(() => {
+    if (selectedNode && selectedNodeData && currentMap && jwt) {
+      // Auto-fetch node details using the /details endpoint
+      handleGetNodeDetails();
+    }
+  }, [selectedNode, handleGetNodeDetails]);
+
+  // Separate effect for focusing input when panel opens
+  useEffect(() => {
+    if (isDetailPanelOpen && !isLoading && questionInputRef.current) {
+      const timer = setTimeout(() => {
+        questionInputRef.current?.focus();
+      }, 500); // Small delay to ensure the panel is fully open
+
+      return () => clearTimeout(timer);
+    }
+  }, [isDetailPanelOpen, isLoading]);
+
+  // Auto-scroll to bottom when conversation updates
+  useEffect(() => {
+    if (conversationEndRef.current) {
+      conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [conversation, isAsking]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDetailPanelOpen) {
+        handleClose();
+      }
+    };
+
+    if (isDetailPanelOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isDetailPanelOpen]);
+
+  const handleAskQuestion = useCallback(async (questionText: string) => {
     if (!currentMap || !jwt || !selectedNodeData) return;
+
+    // Add the question to conversation immediately
+    const questionId = Date.now().toString();
+    setConversation(prev => [...prev, {
+      id: questionId,
+      type: 'question',
+      content: questionText,
+      timestamp: new Date()
+    }]);
 
     setIsAsking(true);
 
@@ -92,8 +145,16 @@ export function NodeDetailPanel() {
       );
 
       if (result.data) {
-        setAnswer(result.data.answer);
-        setCitedSources(result.data.cited_sources || []);
+        // Add the answer to conversation
+        const answerId = (Date.now() + 1).toString();
+        const responseData = result.data;
+        setConversation(prev => [...prev, {
+          id: answerId,
+          type: 'answer',
+          content: responseData.answer,
+          citedSources: responseData.cited_sources || [],
+          timestamp: new Date()
+        }]);
         toast.success('Question answered successfully');
       } else {
         toast.error('Failed to get an answer');
@@ -104,25 +165,27 @@ export function NodeDetailPanel() {
     } finally {
       setIsAsking(false);
     }
-  };
+  }, [currentMap, jwt, selectedNodeData]);
 
-  const handleSubmitQuestion = async (e: React.FormEvent) => {
+  const handleSubmitQuestion = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
 
     await handleAskQuestion(question);
     setQuestion('');
-  };
+  }, [question, handleAskQuestion]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setDetailPanelOpen(false);
     // Reset state when closing
     setTimeout(() => {
-      setAnswer(null);
-      setCitedSources([]);
+      setInitialAnswer(null);
+      setInitialCitedSources([]);
+      setConversation([]);
       setQuestion('');
+      isLoadingRef.current = false;
     }, 300);
-  };
+  }, [setDetailPanelOpen]);
 
   return (
     <Sheet open={isDetailPanelOpen} onOpenChange={handleClose}>
@@ -147,10 +210,10 @@ export function NodeDetailPanel() {
 
           <ScrollArea className="flex-1 spacing-mobile">
             <div className="space-y-6">
-              {/* Generated Answer Section */}
+              {/* Initial Node Details Section */}
               <div>
                 <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
-                  Generated Answer
+                  Node Details
                 </h3>
 
                 {isLoading ? (
@@ -161,7 +224,7 @@ export function NodeDetailPanel() {
                       <Skeleton className="h-4 w-3/4" />
                     </div>
                   </Card>
-                ) : answer ? (
+                ) : initialAnswer ? (
                   <Card className="spacing-mobile-sm">
                     <div className="text-responsive-sm text-foreground leading-relaxed prose prose-sm max-w-none">
                       <ReactMarkdown
@@ -179,27 +242,27 @@ export function NodeDetailPanel() {
                           blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground mb-2">{children}</blockquote>,
                         }}
                       >
-                        {answer}
+                        {initialAnswer}
                       </ReactMarkdown>
                     </div>
                   </Card>
                 ) : (
                   <Card className="spacing-mobile-sm">
                     <p className="text-responsive-sm text-muted-foreground">
-                      No answer available yet.
+                      No details available yet.
                     </p>
                   </Card>
                 )}
               </div>
 
-              {/* Cited Sources Section */}
-              {citedSources.length > 0 && (
+              {/* Initial Cited Sources Section */}
+              {initialCitedSources.length > 0 && (
                 <div>
                   <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
-                    Cited Sources
+                    Sources
                   </h3>
                   <div className="space-y-3">
-                    {citedSources.map((source, index) => (
+                    {initialCitedSources.map((source, index) => (
                       <Card key={index} className="spacing-mobile-sm">
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
@@ -224,17 +287,117 @@ export function NodeDetailPanel() {
                               </Button>
                             )}
                           </div>
-                          {/* {source.snippet && (
-                            <p className="text-responsive-xs text-muted-foreground">
-                              {source.snippet}
-                            </p>
-                          )}
-                          <span className="text-responsive-xs text-muted-foreground">
-                            Type: {source.type}
-                          </span> */}
                         </div>
                       </Card>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Conversation Section */}
+              {conversation.length > 0 && (
+                <div>
+                  <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
+                    Follow-up Questions & Answers
+                  </h3>
+                  <div className="space-y-4">
+                    {conversation.map((message) => (
+                      <div key={message.id} className="space-y-2">
+                        {message.type === 'question' ? (
+                          <Card className="spacing-mobile-sm bg-muted/50 border-muted">
+                            <div className="flex items-start space-x-2">
+                              <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="text-responsive-sm font-medium text-foreground mb-1">
+                                  Your Question:
+                                </p>
+                                <p className="text-responsive-sm text-foreground">
+                                  {message.content}
+                                </p>
+                              </div>
+                            </div>
+                          </Card>
+                        ) : (
+                          <div className="space-y-3">
+                            <Card className="spacing-mobile-sm">
+                              <div className="text-responsive-sm text-foreground leading-relaxed prose prose-sm max-w-none">
+                                <ReactMarkdown
+                                  components={{
+                                    h1: ({ children }) => <h1 className="text-lg font-bold mb-3 text-foreground">{children}</h1>,
+                                    h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                                    h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                                    p: ({ children }) => <p className="mb-2 text-foreground leading-relaxed">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
+                                    li: ({ children }) => <li className="text-foreground">{children}</li>,
+                                    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                                    em: ({ children }) => <em className="italic text-foreground">{children}</em>,
+                                    code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                                    blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground mb-2">{children}</blockquote>,
+                                  }}
+                                >
+                                  {message.content}
+                                </ReactMarkdown>
+                              </div>
+                            </Card>
+
+                            {/* Cited Sources for this answer */}
+                            {message.citedSources && message.citedSources.length > 0 && (
+                              <div className="ml-4">
+                                <h4 className="text-responsive-xs font-medium text-muted-foreground mb-2">
+                                  Sources for this answer:
+                                </h4>
+                                <div className="space-y-2">
+                                  {message.citedSources.map((source, index) => (
+                                    <Card key={index} className="spacing-mobile-sm border-muted">
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <h5 className="text-responsive-xs font-medium text-foreground flex-1">
+                                            {source.title}
+                                          </h5>
+                                          {source.identifier && (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="touch-target flex-shrink-0 h-6 w-6"
+                                              asChild
+                                            >
+                                              <a
+                                                href={source.identifier}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label="Open source link"
+                                              >
+                                                <ExternalLink className="h-3 w-3" />
+                                              </a>
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </Card>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Loading indicator for current question */}
+                    {isAsking && (
+                      <Card className="spacing-mobile-sm">
+                        <div className="flex items-center space-x-3">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <p className="text-responsive-sm text-muted-foreground">
+                            Generating answer...
+                          </p>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Scroll anchor */}
+                    <div ref={conversationEndRef} />
                   </div>
                 </div>
               )}
@@ -245,35 +408,51 @@ export function NodeDetailPanel() {
 
           {/* Ask Follow-up Question */}
           <div className="spacing-mobile pt-4 safe-area-bottom">
-            <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
-              Ask a Follow-up Question
-            </h3>
-            <form onSubmit={handleSubmitQuestion} className="space-y-3">
-              <Input
-                placeholder="Ask anything about this concept..."
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                disabled={isAsking}
-                className="form-mobile text-responsive-sm"
-              />
-              <Button
-                type="submit"
-                className="w-full touch-target text-responsive-sm"
-                disabled={!question.trim() || isAsking}
-              >
-                {isAsking ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Asking...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Ask Question
-                  </>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-responsive-sm font-semibold text-foreground">
+                  Ask a Follow-up Question
+                </h3>
+                {conversation.length > 0 && (
+                  <span className="text-responsive-xs text-muted-foreground">
+                    {conversation.filter(m => m.type === 'question').length} questions asked
+                  </span>
                 )}
-              </Button>
-            </form>
+              </div>
+
+              <form onSubmit={handleSubmitQuestion} className="relative">
+                <Input
+                  ref={questionInputRef}
+                  placeholder="Ask anything about this concept..."
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (question.trim() && !isAsking) {
+                        handleSubmitQuestion(e as any);
+                      }
+                    }
+                  }}
+                  disabled={isAsking}
+                  className="form-mobile text-responsive-sm pr-12"
+                  autoComplete="off"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  variant="ghost"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 hover:bg-muted"
+                  disabled={!question.trim() || isAsking}
+                >
+                  {isAsking ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </form>
+            </div>
           </div>
         </div>
       </SheetContent>
