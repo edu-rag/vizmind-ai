@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -132,7 +133,7 @@ export function NodeDetailPanel() {
         )}
         side={isMobile ? 'bottom' : 'right'}
       >
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col py-4">
           <SheetHeader className="spacing-mobile pb-4 safe-area-top">
             <SheetTitle className="text-left text-responsive-lg">
               Details for: {selectedNodeData?.data.label}
@@ -162,9 +163,25 @@ export function NodeDetailPanel() {
                   </Card>
                 ) : answer ? (
                   <Card className="spacing-mobile-sm">
-                    <p className="text-responsive-sm text-foreground leading-relaxed">
-                      {answer}
-                    </p>
+                    <div className="text-responsive-sm text-foreground leading-relaxed prose prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => <h1 className="text-lg font-bold mb-3 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                          p: ({ children }) => <p className="mb-2 text-foreground leading-relaxed">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className="text-foreground">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic text-foreground">{children}</em>,
+                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground mb-2">{children}</blockquote>,
+                        }}
+                      >
+                        {answer}
+                      </ReactMarkdown>
+                    </div>
                   </Card>
                 ) : (
                   <Card className="spacing-mobile-sm">
@@ -185,7 +202,7 @@ export function NodeDetailPanel() {
                     {citedSources.map((source, index) => (
                       <Card key={index} className="spacing-mobile-sm">
                         <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center justify-between">
                             <h4 className="text-responsive-sm font-medium text-foreground flex-1">
                               {source.title}
                             </h4>
@@ -207,14 +224,14 @@ export function NodeDetailPanel() {
                               </Button>
                             )}
                           </div>
-                          {source.snippet && (
+                          {/* {source.snippet && (
                             <p className="text-responsive-xs text-muted-foreground">
                               {source.snippet}
                             </p>
                           )}
                           <span className="text-responsive-xs text-muted-foreground">
                             Type: {source.type}
-                          </span>
+                          </span> */}
                         </div>
                       </Card>
                     ))}
