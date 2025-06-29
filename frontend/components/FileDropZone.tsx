@@ -581,7 +581,7 @@ export function FileDropZone() {
 
                       {/* File Info */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
+                        <p className="text-sm font-medium text-foreground truncate text-start">
                           {file.file.name}
                         </p>
                         <div className="flex items-center space-x-2 mt-1">

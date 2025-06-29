@@ -355,7 +355,7 @@ export function HistorySidebar() {
                     </div>
                   </div>
 
-                  <ScrollArea className="flex-1 px-4" onScrollCapture={handleScroll}>
+                  <ScrollArea className="flex-1 px-4 overflow-x-hidden" onScrollCapture={handleScroll}>
                     {isLoading ? (
                       <div className="space-y-3">
                         {[...Array(4)].map((_, i) => (
@@ -381,11 +381,11 @@ export function HistorySidebar() {
                     ) : (
                       <div className="space-y-3 pb-4">
                         {visibleMaps.map((item, index) => (
-                          <div key={item.map_id} className="relative group">
+                          <div key={item.map_id} className="w-full md:max-w-[286px] relative group">
                             <Card
                               className={cn(
-                                'p-4 cursor-pointer transition-all duration-200 touch-target group',
-                                'focus-visible-ring hover:shadow-md hover:scale-[1.02]',
+                                'p-4 cursor-pointer transition-all duration-200 touch-target group w-full overflow-hidden',
+                                'focus-visible-ring hover:shadow-md',
                                 currentMap?.mongodb_doc_id === item.map_id
                                   ? 'bg-primary/5 border-primary/20 shadow-sm'
                                   : 'hover:bg-accent/50 border-border',
@@ -404,7 +404,7 @@ export function HistorySidebar() {
                               }}
                               aria-label={`Open map: ${item.source_filename}`}
                             >
-                              <div className="flex items-start space-x-3">
+                              <div className="flex items-start space-x-3 w-full min-w-0">
                                 <div className={cn(
                                   'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
                                   currentMap?.mongodb_doc_id === item.map_id
@@ -413,16 +413,16 @@ export function HistorySidebar() {
                                 )}>
                                   <FileText className="h-5 w-5" />
                                 </div>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 overflow-hidden">
                                   <p className="text-responsive-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
                                     {item.source_filename.replace('.pdf', '')}
                                   </p>
-                                  <div className="flex items-center space-x-2 mt-1">
-                                    <p className="text-responsive-xs text-muted-foreground">
+                                  <div className="flex items-center space-x-2 mt-1 min-w-0">
+                                    <p className="text-responsive-xs text-muted-foreground flex-shrink-0">
                                       {formatDate(item.created_at)}
                                     </p>
                                     {index === 0 && (
-                                      <span className="text-responsive-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                      <span className="text-responsive-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex-shrink-0">
                                         Latest
                                       </span>
                                     )}
