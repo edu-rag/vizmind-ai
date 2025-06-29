@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from app.core.security import create_access_token, verify_google_id_token
+from app.core.security import create_access_token, verify_google_token
 from app.services.user_service import create_or_update_user_from_google
 from app.models.token_models import TokenData, TokenResponse
 from app.models.user_models import UserModelInDB
@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/google", response_model=TokenResponse, tags=["Authentication"])
 async def login_with_google(token_data: TokenData):
     logger.info("Received request for Google login.")
-    google_user_info = await verify_google_id_token(token_data.google_id_token)
+    google_user_info = await verify_google_token(token_data.google_id_token)
     if not google_user_info:
         logger.warning("Google ID token verification failed.")
         raise HTTPException(

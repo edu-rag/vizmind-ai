@@ -1,5 +1,6 @@
 # app/main.py
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings, logger
@@ -63,6 +64,15 @@ app = FastAPI(
     # route if FastAPI correctly infers it from the HTTPBearer dependency.
     # However, if it doesn't show the lock icon, you might add it to the router:
     # api_router_v1 = APIRouter(security=[{"BearerAuth": []}])
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 # Include the v1 API router

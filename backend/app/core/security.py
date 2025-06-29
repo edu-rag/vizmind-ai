@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
+import httpx
 
 from jose import JWTError, jwt
 from google.oauth2 import id_token as google_id_token
@@ -37,6 +38,57 @@ async def verify_google_id_token(token: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Unexpected error during Google ID token verification: {e}")
         return None
+
+
+async def verify_google_access_token(access_token: str) -> Optional[Dict[str, Any]]:
+    """
+    Verify Google access token by fetching user info from Google's userinfo API.
+    This is a fallback method if ID token is not available.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://www.googleapis.com/oauth2/v2/userinfo?access_token={access_token}"
+            )
+            if response.status_code == 200:
+                user_info = response.json()
+                # Convert to match ID token format
+                return {
+                    "sub": user_info.get("id"),
+                    "email": user_info.get("email"),
+                    "name": user_info.get("name"),
+                    "picture": user_info.get("picture"),
+                    "email_verified": user_info.get("verified_email", False),
+                }
+            else:
+                logger.error(
+                    f"Google access token verification failed with status: {response.status_code}"
+                )
+                return None
+    except Exception as e:
+        logger.error(f"Error verifying Google access token: {e}")
+        return None
+
+
+async def verify_google_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Verify Google token - tries ID token first, then access token as fallback.
+    """
+    # First try to verify as ID token
+    id_token_result = await verify_google_id_token(token)
+    if id_token_result:
+        return id_token_result
+
+    # If ID token verification fails, try as access token
+    logger.info("ID token verification failed, trying as access token")
+    access_token_result = await verify_google_access_token(token)
+    if access_token_result:
+        logger.warning(
+            "Using access token verification as fallback - consider updating frontend to use ID tokens"
+        )
+        return access_token_result
+
+    return None
 
 
 # Password hashing utilities (if you add direct password auth later)
