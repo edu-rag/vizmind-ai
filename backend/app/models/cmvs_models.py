@@ -60,9 +60,9 @@ class RetrievedChunk(BaseModel):
 
 
 class CitationSource(BaseModel):
-    type: str  # e.g., "mongodb_chunk", "web_search"
-    identifier: str  # e.g., MongoDB document _id, S3 path, or URL
-    title: Optional[str] = None  # e.g., original PDF filename, web page title
+    type: str  # e.g., "mongodb_chunk"
+    identifier: str  # e.g., MongoDB document _id, S3 path
+    title: Optional[str] = None  # e.g., original PDF filename
     page_number: Optional[int] = None  # If applicable and available
     snippet: Optional[str] = None  # The actual text content of the chunk/source
 
@@ -72,7 +72,7 @@ class NodeDetailResponse(BaseModel):
     answer: str
     cited_sources: List[CitationSource]
     message: Optional[str] = None
-    search_performed: Optional[str] = None  # To indicate "db_only" or "db_and_web"
+    search_performed: Optional[str] = None  # To indicate "document_only"
 
 
 class DocumentSufficiencyGrade(LangchainBaseModel):

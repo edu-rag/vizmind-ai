@@ -44,14 +44,10 @@ class RAGGraphState(TypedDict):
 
     # Retrieval results
     db_documents: List[Document]
-    web_documents: Optional[List[Document]]  # Populated if web search is triggered
 
     # Generation results
     answer: str
     cited_sources: List[Dict[str, Any]]  # Will be transformed into CitationSource model
 
     # Control flow
-    # Determines if the initial DB retrieval was sufficient
-    # Values: "generate_from_db", "perform_web_search"
-    db_retrieval_status: str
     error_message: Optional[str]
