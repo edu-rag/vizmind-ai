@@ -7,7 +7,7 @@ interface MapLayoutProps {
 
 export async function generateMetadata({ params }: MapLayoutProps): Promise<Metadata> {
   const mapId = params.mapId;
-  
+
   return {
     title: `Concept Map - Knowledge Platform`,
     description: 'Interactive concept map generated from PDF document',

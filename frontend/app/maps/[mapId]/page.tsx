@@ -5,10 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  ArrowLeft, 
-  Share2, 
-  Download, 
+import {
+  ArrowLeft,
+  Share2,
+  Download,
   MoreHorizontal,
   AlertCircle,
   Home
@@ -32,16 +32,16 @@ export default function MapPage() {
   const params = useParams();
   const router = useRouter();
   const mapId = params.mapId as string;
-  
-  const { 
-    currentMap, 
-    setCurrentMap, 
-    isAuthenticated, 
+
+  const {
+    currentMap,
+    setCurrentMap,
+    isAuthenticated,
     jwt,
     setSelectedNode,
-    setDetailPanelOpen 
+    setDetailPanelOpen
   } = useAppStore();
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -67,13 +67,13 @@ export default function MapPage() {
 
   const loadMap = async () => {
     if (!jwt || !mapId) return;
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const result = await getConceptMap(mapId, jwt);
-      
+
       if (result.error) {
         setError('Failed to load concept map');
         return;
@@ -139,7 +139,7 @@ export default function MapPage() {
             </div>
           </div>
         </div>
-        
+
         {/* Map Skeleton */}
         <div className="flex-1 p-4">
           <div className="h-full max-w-7xl mx-auto">
@@ -211,7 +211,7 @@ export default function MapPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            
+
             <div className="min-w-0">
               <h1 className="text-lg font-semibold text-foreground truncate">
                 {currentMap.source_filename?.replace('.pdf', '') || 'Concept Map'}
@@ -221,7 +221,7 @@ export default function MapPage() {
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             {!isMobile && (
               <>
@@ -234,7 +234,7 @@ export default function MapPage() {
                   <Share2 className="mr-2 h-4 w-4" />
                   Share
                 </Button>
-                
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -246,7 +246,7 @@ export default function MapPage() {
                 </Button>
               </>
             )}
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
