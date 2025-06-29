@@ -1,6 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from langchain_core.pydantic_v1 import BaseModel as LangchainBaseModel
+try:
+    from pydantic.v1 import BaseModel as LangchainBaseModel
+except ImportError:
+    from pydantic import BaseModel as LangchainBaseModel
 
 
 # --- LLM Interaction Models ---

@@ -278,11 +278,22 @@ class CMVSNodes:
             elif len(attachments) == 1:
                 document_context = f"\n\nNote: This analysis is based on the document: {attachment_names[0]}."
 
-            prompt = f"""Please analyze the following document(s) and generate a high-level concept map that outlines the main ideas, core arguments, and overall structure.
-Focus on creating a 'mind map' style overview, not a detailed, granular breakdown of every piece of information.
-Extract between 5 to 15 key concepts and their primary relationships to represent the essence of the content.
-Avoid including minor details, specific examples from the text, or overly granular sub-points in THIS main map.
-The goal is a concise overview that a user can explore, with details to be fetched later.{document_context}
+            prompt = f"""Please analyze the following document(s) and generate a high-level mind map that captures the main conceptual ideas and their relationships.
+
+MIND MAP GUIDELINES:
+1. Focus on CONCEPTUAL NODES - abstract ideas, theories, principles, main topics, key themes
+2. AVOID: References, citations, page numbers, author names, specific examples, minor details
+3. Extract 5-15 core concepts that represent the essence of the content
+4. Create meaningful relationships between concepts using clear relational terms
+5. Think like creating a mind map - start with central themes and branch out to related concepts
+
+GOOD NODES: "Machine Learning", "Neural Networks", "Data Processing", "Algorithm Optimization"
+BAD NODES: "Figure 1.2", "Smith et al. 2020", "Table 3", "Example A", "Reference [1]"
+
+GOOD RELATIONS: "implements", "is part of", "leads to", "requires", "influences", "contains", "depends on"
+BAD RELATIONS: "mentioned in", "cited by", "shown in", "referenced as"
+
+Create a mind map structure that helps users understand the core conceptual framework of the content.{document_context}
 
 Document Text:
 ---
@@ -290,12 +301,12 @@ Document Text:
 ---
 
 Return ONLY a valid JSON object in this exact format:
-{{"triples": [{{"source": "Main Idea A", "target": "Main Idea B", "relation": "is related to/explains/is part of"}}]}}
+{{"triples": [{{"source": "Core Concept A", "target": "Related Concept B", "relation": "meaningful relationship"}}]}}
 
-If the document is too short or abstract to extract such a map, return:
+If the document lacks sufficient conceptual content for a mind map, return:
 {{"triples": []}}
 
-Ensure each triple has 'source', 'target', and 'relation' fields populated with meaningful, concise text.
+Focus on capturing the conceptual landscape, not the documentary structure.
 """
             all_triples: List[Dict[str, str]] = []
             try:
@@ -352,11 +363,15 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
                     or f"LLM processing error for main map: {str(e)}",
                 }
 
+            # Filter triples to keep only conceptual nodes suitable for mind mapping
+            conceptual_triples = self._filter_conceptual_triples(all_triples)
+            
             logger.info(
-                f"Total raw triples extracted for main concept map: {len(all_triples)}"
+                f"Extracted {len(all_triples)} raw triples, {len(conceptual_triples)} conceptual triples suitable for mind mapping"
             )
+            
             return {
-                "raw_triples": all_triples,
+                "raw_triples": conceptual_triples,
                 "error_message": state.get("error_message"),
             }  # Preserve prior errors
         except Exception as e:
@@ -424,15 +439,20 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
             unique_node_labels = list(nodes)
             node_map = {label: label for label in unique_node_labels}
 
-            if len(unique_node_labels) > 1:  # ... (cosine similarity merging logic) ...
+            if len(unique_node_labels) > 1:  # Apply similarity-based merging for conceptual nodes
                 node_embeddings = await self._get_node_embeddings_for_similarity(
                     unique_node_labels
                 )
                 cosine_matrix = await asyncio.to_thread(
                     cosine_similarity, node_embeddings
                 )
-                # ... (loop and merge) ...
-                similarity_threshold = 0.85
+                
+                # Use higher similarity threshold for conceptual nodes to avoid over-merging
+                # Conceptual nodes should be more distinct in a mind map
+                similarity_threshold = 0.90  # Higher threshold for mind mapping
+                
+                logger.info(f"Applying similarity merging with threshold {similarity_threshold} for {len(unique_node_labels)} conceptual nodes")
+                
                 for i in range(len(unique_node_labels)):
                     if node_map[unique_node_labels[i]] != unique_node_labels[i]:
                         continue
@@ -440,33 +460,55 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
                         if node_map[unique_node_labels[j]] != unique_node_labels[j]:
                             continue
                         if cosine_matrix[i, j] > similarity_threshold:
+                            # For mind mapping, prefer keeping the shorter, more general term
+                            label_i = unique_node_labels[i]
+                            label_j = unique_node_labels[j]
+                            
+                            if len(label_i) <= len(label_j):
+                                keep_label, merge_label = label_i, label_j
+                            else:
+                                keep_label, merge_label = label_j, label_i
+                                
                             logger.info(
-                                f"    Merging '{unique_node_labels[j]}' into '{unique_node_labels[i]}' (similarity: {cosine_matrix[i,j]:.2f})"
+                                f"    Merging conceptual nodes: '{merge_label}' -> '{keep_label}' (similarity: {cosine_matrix[i,j]:.2f})"
                             )
-                            node_map[unique_node_labels[j]] = unique_node_labels[i]
+                            node_map[merge_label] = keep_label
 
+            # Apply node mappings and create final triples
             merged_triples_final = []
             for triple in normalized_triples_intermediate:
                 source = triple["source"]
                 target = triple["target"]
+                
+                # Apply node mappings
                 while node_map.get(source, source) != source:
                     source = node_map[source]
                 while node_map.get(target, target) != target:
                     target = node_map[target]
-                merged_triples_final.append(
-                    {"source": source, "target": target, "relation": triple["relation"]}
-                )
+                
+                # Skip self-loops which don't make sense in mind maps
+                if source != target:
+                    merged_triples_final.append(
+                        {"source": source, "target": target, "relation": triple["relation"]}
+                    )
 
+            # Remove duplicate triples and bidirectional duplicates for mind mapping
+            # In mind maps, we typically want undirected relationships
             final_triples_set = set()
             final_unique_triples = []
+            
             for triple in merged_triples_final:
-                triple_tuple = tuple(sorted(triple.items()))
-                if triple_tuple not in final_triples_set:
+                source, target, relation = triple["source"], triple["target"], triple["relation"]
+                
+                # Create a normalized tuple for comparison (alphabetically sorted to handle bidirectionality)
+                normalized_tuple = (min(source, target), max(source, target), relation.lower().strip())
+                
+                if normalized_tuple not in final_triples_set:
                     final_unique_triples.append(triple)
-                    final_triples_set.add(triple_tuple)
+                    final_triples_set.add(normalized_tuple)
 
             logger.info(
-                f"Main map post-processing resulted in {len(final_unique_triples)} unique triples."
+                f"Mind map processing: {len(raw_triples)} raw -> {len(normalized_triples_intermediate)} normalized -> {len(final_unique_triples)} final unique conceptual relationships"
             )
             return {"processed_triples": final_unique_triples, "error_message": None}
 
@@ -602,3 +644,221 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
                 "mongodb_chunk_ids": [],
                 "error_message": str(e),
             }
+
+    def _is_conceptual_node(self, node_text: str) -> bool:
+        """
+        Determines if a node represents a conceptual idea suitable for mind mapping.
+        Filters out references, citations, examples, and non-conceptual content.
+        """
+        if not node_text or not node_text.strip():
+            return False
+
+        node_text = node_text.strip().lower()
+
+        # Filter out common non-conceptual patterns
+        non_conceptual_patterns = [
+            r"^figure\s+\d+",  # Figure 1, Figure 2.1, etc.
+            r"^table\s+\d+",   # Table 1, Table 2.1, etc.
+            r"^section\s+\d+", # Section 1, Section 2.1, etc.
+            r"^chapter\s+\d+", # Chapter 1, Chapter 2, etc.
+            r"^page\s+\d+",    # Page 1, Page 123, etc.
+            r"^reference\s*\[?\d+\]?", # Reference 1, Reference [1], etc.
+            r"^\[?\d+\]?$",    # [1], 2, [123], etc.
+            r"^example\s*\d*$", # Example, Example 1, etc.
+            r"^appendix\s+[a-z]?", # Appendix, Appendix A, etc.
+            r"et\s+al\.?$",    # Smith et al., Jones et al
+            r"^\d{4}$",        # Years like 2023, 2024
+            r"^vol\.?\s*\d+",  # Vol. 1, Volume 2, etc.
+            r"^pp?\.?\s*\d+",  # p. 123, pp. 45-67, etc.
+            r"^isbn",          # ISBN numbers
+            r"^doi:",          # DOI references
+            r"http[s]?://",   # URLs
+            r"^www\.",         # Web addresses
+        ]
+
+        # Check against patterns
+        for pattern in non_conceptual_patterns:
+            if re.search(pattern, node_text):
+                return False
+
+        # Filter out very short non-descriptive words
+        if len(node_text) < 3:
+            return False
+
+        # Filter out common non-conceptual words
+        non_conceptual_words = {
+            "the",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "as",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "can",
+            "this",
+            "that",
+            "these",
+            "those",
+            "here",
+            "there",
+            "where",
+            "when",
+            "why",
+            "how",
+            "what",
+            "which",
+            "who",
+            "above",
+            "below",
+            "before",
+            "after",
+            "during",
+            "through",
+            "between",
+            "among",
+            "within",
+            "without",
+            "across",
+            "around",
+            "toward",
+            "towards",
+            "under",
+            "over",
+            "above",
+            "below",
+            "beside",
+            "near",
+            "far",
+            "close",
+            "same",
+            "different",
+            "similar",
+            "unlike",
+            "like",
+            "such",
+            "also",
+            "too",
+            "very",
+            "much",
+            "many",
+            "most",
+            "more",
+            "less",
+            "few",
+            "little",
+            "some",
+            "any",
+            "all",
+            "each",
+            "every",
+            "both",
+            "either",
+            "neither",
+            "first",
+            "second",
+            "third",
+            "last",
+            "next",
+            "previous",
+            "other",
+            "another",
+        }
+
+        if node_text in non_conceptual_words:
+            return False
+
+        # Must contain at least one alphabetic character
+        if not re.search(r"[a-zA-Z]", node_text):
+            return False
+
+        # Prefer longer, more descriptive terms for concepts
+        # But allow some shorter conceptual terms
+        meaningful_short_terms = {
+            "ai",
+            "ml",
+            "api",
+            "cpu",
+            "gpu",
+            "ram",
+            "sql",
+            "xml",
+            "json",
+            "html",
+            "css",
+            "php",
+            "ios",
+            "ui",
+            "ux",
+            "seo",
+            "crm",
+            "erp",
+            "roi",
+            "kpi",
+            "sdg",
+            "gdp",
+            "nasa",
+            "who",
+            "faq",
+            "ceo",
+            "cto",
+            "hr",
+            "it",
+            "pr",
+        }
+
+        if len(node_text) < 4 and node_text not in meaningful_short_terms:
+            return False
+
+        return True
+
+    def _filter_conceptual_triples(self, triples: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Filters triples to keep only those with conceptual nodes suitable for mind mapping.
+        """
+        conceptual_triples = []
+
+        for triple in triples:
+            source = triple.get("source", "").strip()
+            target = triple.get("target", "").strip()
+            relation = triple.get("relation", "").strip()
+
+            # Both source and target must be conceptual
+            if (
+                self._is_conceptual_node(source)
+                and self._is_conceptual_node(target)
+                and source.lower() != target.lower()  # Avoid self-loops
+                and relation  # Must have a relation
+            ):
+                conceptual_triples.append(triple)
+            else:
+                logger.debug(
+                    f"Filtered out non-conceptual triple: {source} -> {target}"
+                )
+
+        return conceptual_triples
