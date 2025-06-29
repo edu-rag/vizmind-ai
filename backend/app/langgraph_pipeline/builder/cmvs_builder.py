@@ -25,15 +25,17 @@ def build_graph_instance() -> StateGraph:
     workflow.add_node("embed_chunks", cmvs_nodes_instance.embed_text_chunks)
     workflow.add_node("extract_main_map", cmvs_nodes_instance.extract_main_concept_map)
     workflow.add_node("process_main_map_graph", cmvs_nodes_instance.process_graph_data)
-    workflow.add_node("generate_main_map_mermaid", cmvs_nodes_instance.generate_mermaid)
+    workflow.add_node(
+        "generate_main_map_react_flow", cmvs_nodes_instance.generate_react_flow
+    )
     workflow.add_node("store_db", cmvs_nodes_instance.store_cmvs_data_in_mongodb)
 
     workflow.set_entry_point("chunk_text")
     workflow.add_edge("chunk_text", "embed_chunks")
     workflow.add_edge("embed_chunks", "extract_main_map")
     workflow.add_edge("extract_main_map", "process_main_map_graph")
-    workflow.add_edge("process_main_map_graph", "generate_main_map_mermaid")
-    workflow.add_edge("generate_main_map_mermaid", "store_db")
+    workflow.add_edge("process_main_map_graph", "generate_main_map_react_flow")
+    workflow.add_edge("generate_main_map_react_flow", "store_db")
     workflow.add_edge("store_db", END)
 
     # Compile the graph
@@ -44,7 +46,7 @@ def build_graph_instance() -> StateGraph:
     # memory = SqliteSaver(conn=sqlite3.connect("langgraph_checkpoints.sqlite"))
     cmvs_langgraph_app = workflow.compile()
     logger.info(
-        "✅ CMVS LangGraph App (for main idea map & chunk storage) Compiled and Ready."
+        "✅ CMVS LangGraph App (for main idea map & chunk storage with React Flow) Compiled and Ready."
     )
     return cmvs_langgraph_app
 

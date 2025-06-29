@@ -24,10 +24,118 @@ from app.services.cmvs_service import (
     run_cmvs_pipeline,
 )
 from app.langgraph_pipeline.state import GraphState
+from app.db.mongodb_utils import get_db
+from app.core.config import settings
+from bson import ObjectId
+from pymongo.errors import PyMongoError
 
 
 router = APIRouter()
 s3_service_instance = S3Service()  # Instantiate S3 service
+
+
+@router.get("/history/", tags=["Maps"])
+async def get_map_history_endpoint(
+    current_user: UserModelInDB = Depends(get_current_active_user),
+):
+    """
+    Retrieves the user's concept map history.
+    """
+    try:
+        db = get_db()
+        cm_collection = db[settings.MONGODB_CMVS_COLLECTION]
+
+        # Find all concept maps for the current user
+        maps_cursor = cm_collection.find(
+            {"user_id": current_user.id},
+            {"_id": 1, "original_filename": 1, "created_at": 1, "s3_path": 1},
+        ).sort(
+            "created_at", -1
+        )  # Most recent first
+
+        history = []
+        for map_doc in maps_cursor:
+            history.append(
+                {
+                    "map_id": str(map_doc["_id"]),
+                    "source_filename": map_doc.get("original_filename", "Unknown"),
+                    "created_at": (
+                        map_doc.get("created_at").isoformat()
+                        if map_doc.get("created_at")
+                        else None
+                    ),
+                }
+            )
+
+        logger.info(f"Retrieved {len(history)} maps for user {current_user.email}")
+        return {"history": history}
+
+    except PyMongoError as e:
+        logger.error(
+            f"Database error retrieving map history for user {current_user.email}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Database error occurred")
+    except Exception as e:
+        logger.error(f"Error retrieving map history for user {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{map_id}", tags=["Maps"])
+async def get_concept_map_endpoint(
+    map_id: str,
+    current_user: UserModelInDB = Depends(get_current_active_user),
+):
+    """
+    Retrieves a specific concept map by ID.
+    """
+    try:
+        # Validate map_id is a valid ObjectId
+        if not ObjectId.is_valid(map_id):
+            raise HTTPException(status_code=400, detail="Invalid map ID format")
+
+        db = get_db()
+        cm_collection = db[settings.MONGODB_CMVS_COLLECTION]
+
+        # Find the concept map document
+        map_doc = cm_collection.find_one(
+            {
+                "_id": ObjectId(map_id),
+                "user_id": current_user.id,  # Ensure user can only access their own maps
+            }
+        )
+
+        if not map_doc:
+            raise HTTPException(status_code=404, detail="Concept map not found")
+
+        # Get the react flow data
+        react_flow_data = map_doc.get("react_flow_data")
+
+        if not react_flow_data:
+            logger.warning(f"Map {map_id} exists but has no react_flow_data")
+            # Return empty structure if no data exists
+            react_flow_data = {"nodes": [], "edges": []}
+
+        response = {
+            "mongodb_doc_id": str(map_doc["_id"]),
+            "react_flow_data": react_flow_data,
+        }
+
+        logger.info(f"Retrieved concept map {map_id} for user {current_user.email}")
+        return response
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except PyMongoError as e:
+        logger.error(
+            f"Database error retrieving map {map_id} for user {current_user.email}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Database error occurred")
+    except Exception as e:
+        logger.error(
+            f"Error retrieving map {map_id} for user {current_user.email}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/generate/", response_model=MultipleCMVSResponse)
@@ -112,7 +220,7 @@ async def generate_concept_map_secure_endpoint(
                 embedded_chunks=[],
                 raw_triples=[],
                 processed_triples=[],
-                mermaid_code="",
+                react_flow_data={},
                 mongodb_doc_id=None,
                 mongodb_chunk_ids=[],
                 error_message=None,
@@ -144,7 +252,7 @@ async def generate_concept_map_secure_endpoint(
                         filename=filename,
                         status="success",
                         s3_path=s3_file_path,
-                        mermaid_code=final_graph_state_dict.get("mermaid_code"),
+                        react_flow_data=final_graph_state_dict.get("react_flow_data"),
                         processed_triples=final_graph_state_dict.get(
                             "processed_triples"
                         ),

@@ -33,7 +33,7 @@ async def test_complete_pipeline():
         embedded_chunks=[],
         raw_triples=[],
         processed_triples=[],
-        mermaid_code="",
+        react_flow_data={},
         mongodb_doc_id=None,
         mongodb_chunk_ids=[],
         error_message=None,
@@ -60,14 +60,16 @@ async def test_complete_pipeline():
         embedded_chunks = final_state.get("embedded_chunks", [])
         raw_triples = final_state.get("raw_triples", [])
         processed_triples = final_state.get("processed_triples", [])
-        mermaid_code = final_state.get("mermaid_code", "")
+        react_flow_data = final_state.get("react_flow_data", {})
         mongodb_doc_id = final_state.get("mongodb_doc_id")
 
         logger.info(f"✅ Text chunking: {len(text_chunks)} chunks created")
         logger.info(f"✅ Embedding: {len(embedded_chunks)} chunks embedded")
         logger.info(f"✅ Triple extraction: {len(raw_triples)} raw triples extracted")
         logger.info(f"✅ Triple processing: {len(processed_triples)} processed triples")
-        logger.info(f"✅ Mermaid generation: {len(mermaid_code)} characters generated")
+        logger.info(
+            f"✅ React Flow generation: {len(react_flow_data.get('nodes', []))} nodes, {len(react_flow_data.get('edges', []))} edges"
+        )
         logger.info(
             f"✅ MongoDB storage: {'Success' if mongodb_doc_id else 'Skipped/Failed'}"
         )
@@ -87,13 +89,24 @@ async def test_complete_pipeline():
                     f"  {i+1}. {triple['source']} --[{triple['relation']}]--> {triple['target']}"
                 )
 
-        if mermaid_code:
-            logger.info("🎨 Mermaid code preview:")
-            lines = mermaid_code.split("\n")[:5]
-            for line in lines:
-                logger.info(f"  {line}")
-            if len(mermaid_code.split("\n")) > 5:
-                logger.info("  ...")
+        if react_flow_data and react_flow_data.get("nodes"):
+            logger.info("🎨 React Flow data preview:")
+            nodes = react_flow_data.get("nodes", [])
+            edges = react_flow_data.get("edges", [])
+            logger.info(f"  Nodes: {len(nodes)} total")
+            for i, node in enumerate(nodes[:3]):
+                logger.info(
+                    f"    {i+1}. {node['data']['label']} at ({node['position']['x']}, {node['position']['y']})"
+                )
+            if len(nodes) > 3:
+                logger.info("    ...")
+            logger.info(f"  Edges: {len(edges)} total")
+            for i, edge in enumerate(edges[:3]):
+                logger.info(
+                    f"    {i+1}. {edge['source']} --[{edge.get('label', '')}]--> {edge['target']}"
+                )
+            if len(edges) > 3:
+                logger.info("    ...")
 
         # Overall success check
         success = (
@@ -101,7 +114,7 @@ async def test_complete_pipeline():
             and len(embedded_chunks) > 0
             and len(raw_triples) > 0
             and len(processed_triples) > 0
-            and len(mermaid_code) > 0
+            and len(react_flow_data.get("nodes", [])) > 0
         )
 
         if success:

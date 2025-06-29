@@ -19,7 +19,7 @@ class GraphState(TypedDict):
     embedded_chunks: Optional[List[EmbeddedChunk]]
     raw_triples: List[Dict[str, str]]
     processed_triples: List[Dict[str, str]]
-    mermaid_code: str
+    react_flow_data: Dict[str, Any]
 
     # DB Interaction results
     mongodb_doc_id: Optional[str]  # ID of the main concept map document

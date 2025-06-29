@@ -9,7 +9,7 @@ from langchain_groq import ChatGroq
 from langchain_experimental.text_splitter import SemanticChunker  # Corrected import
 from langchain_huggingface import (
     HuggingFaceEmbeddings,
-)  
+)
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -18,7 +18,7 @@ from app.core.config import settings, logger
 from app.langgraph_pipeline.state import GraphState, EmbeddedChunk
 from app.models.cmvs_models import ConceptTripleLLM, ExtractedTriplesLLM
 from app.db.mongodb_utils import get_db
-from app.utils.cmvs_helpers import normalize_label, generate_mermaid_graph_syntax
+from app.utils.cmvs_helpers import normalize_label, generate_react_flow_data
 
 import datetime
 from pymongo import ReturnDocument
@@ -426,29 +426,27 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
             logger.error(f"Error in process_graph_data: {e}", exc_info=True)
             return {"error_message": str(e), "processed_triples": []}
 
-    async def generate_mermaid(self, state: GraphState) -> Dict[str, Any]:
+    async def generate_react_flow(self, state: GraphState) -> Dict[str, Any]:
         logger.info(
-            f"--- Node: Generating Mermaid Code for Main Map (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Generating React Flow Data for Main Map (File: {state.get('current_filename', 'N/A')}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             processed_triples = state.get("processed_triples", [])
             if not processed_triples:  # ... (handle no triples) ...
-                mermaid_code = await asyncio.to_thread(
-                    generate_mermaid_graph_syntax, []
-                )
+                react_flow_data = await asyncio.to_thread(generate_react_flow_data, [])
                 return {
-                    "mermaid_code": mermaid_code,
+                    "react_flow_data": react_flow_data,
                     "error_message": state.get("error_message")
-                    or "No processed triples for Mermaid.",
+                    or "No processed triples for React Flow.",
                 }
-            mermaid_code = await asyncio.to_thread(
-                generate_mermaid_graph_syntax, processed_triples
+            react_flow_data = await asyncio.to_thread(
+                generate_react_flow_data, processed_triples
             )
-            return {"mermaid_code": mermaid_code, "error_message": None}
+            return {"react_flow_data": react_flow_data, "error_message": None}
         except Exception as e:
-            logger.error(f"Error in generate_mermaid: {e}", exc_info=True)
+            logger.error(f"Error in generate_react_flow: {e}", exc_info=True)
             return {
-                "mermaid_code": generate_mermaid_graph_syntax([]),
+                "react_flow_data": generate_react_flow_data([]),
                 "error_message": str(e),
             }
 
@@ -462,7 +460,7 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
             embedded_chunks = state.get("embedded_chunks", [])
             original_text = state.get("original_text", "")
             s3_path = state.get("s3_path")
-            mermaid_code = state.get("mermaid_code")
+            react_flow_data = state.get("react_flow_data")
 
             if not processed_triples and not embedded_chunks:
                 return {
@@ -495,7 +493,7 @@ Ensure each triple has 'source', 'target', and 'relation' fields populated with 
                         "original_text_snippet": original_text[:500]
                         + ("..." if len(original_text) > 500 else ""),
                         "triples": processed_triples,
-                        "mermaid_code": mermaid_code,
+                        "react_flow_data": react_flow_data,
                         "created_at": datetime.datetime.now(UTC),
                     }
                     main_result = cm_collection.insert_one(main_doc_to_insert)

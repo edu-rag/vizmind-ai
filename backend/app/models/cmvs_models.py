@@ -23,7 +23,7 @@ class CMVSResponse(BaseModel):
     filename: str
     status: str
     s3_path: Optional[str] = None
-    mermaid_code: Optional[str] = None
+    react_flow_data: Optional[Dict[str, Any]] = None
     processed_triples: Optional[List[Dict[str, str]]] = None  # Triples after processing
     mongodb_doc_id: Optional[str] = None  # Main CMVS doc ID
     mongodb_chunk_ids: Optional[List[str]] = None  # IDs of stored chunk/embedding docs

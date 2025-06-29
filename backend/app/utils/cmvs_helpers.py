@@ -1,5 +1,6 @@
 import re
-from typing import List, Dict
+import math
+from typing import List, Dict, Any
 
 
 def normalize_label(label: str) -> str:
@@ -7,65 +8,83 @@ def normalize_label(label: str) -> str:
     return label.lower().strip()
 
 
-def generate_mermaid_graph_syntax(triples: List[Dict[str, str]]) -> str:
+def generate_react_flow_data(triples: List[Dict[str, str]]) -> Dict[str, Any]:
     """
-    Generates Mermaid syntax for a concept map (using graph TD).
-    Handles unique node IDs and escaping for labels.
+    Generates React Flow nodes and edges data structure from concept triples.
+    Returns a dict with 'nodes' and 'edges' arrays compatible with React Flow.
     """
     if not triples:
-        return "graph TD\n  EmptyGraph[No concepts extracted or an error occurred.];"
+        return {
+            "nodes": [
+                {
+                    "id": "empty-node",
+                    "data": {"label": "No concepts extracted"},
+                    "position": {"x": 100, "y": 100},
+                    "type": "default",
+                }
+            ],
+            "edges": [],
+        }
 
-    mermaid_string = "graph TD\n"
-    # Node ID generation needs to be robust and consistent
-    # Using a simple counter and sanitized label prefix
-    # A more robust approach might map original labels to truly unique alphanumeric IDs if issues arise
-
-    # Step 1: Collect all unique labels to define nodes first with proper escaping
+    # Step 1: Collect all unique labels
     unique_labels = set()
     for triple in triples:
         unique_labels.add(str(triple.get("source", "UnknownSource")))
         unique_labels.add(str(triple.get("target", "UnknownTarget")))
 
-    node_id_map = {}  # Maps original label to generated mermaid_id
-    node_counter = 0
-    for label in unique_labels:
-        # Create a more robust ID: replace non-alphanumeric, ensure not empty, add counter
-        # Basic sanitization for ID:
-        temp_id = re.sub(r"\W+", "_", label)  # Replace non-alphanumeric with underscore
-        temp_id = re.sub(
-            r"^[^a-zA-Z_]+", "", temp_id
-        )  # Ensure starts with letter or underscore
-        if not temp_id:  # If label was all special characters or empty
-            temp_id = f"concept_{node_counter}"
+    # Step 2: Create nodes with positions
+    nodes = []
+    label_to_id = {}
+
+    # Calculate positions in a circular layout
+    num_nodes = len(unique_labels)
+    center_x, center_y = 300, 300
+    radius = max(150, num_nodes * 30)  # Dynamic radius based on node count
+
+    for i, label in enumerate(sorted(unique_labels)):
+        # Generate unique, React Flow compatible ID
+        node_id = f"node-{i}"
+        label_to_id[label] = node_id
+
+        # Calculate position in circular layout
+        if num_nodes == 1:
+            x, y = center_x, center_y
         else:
-            temp_id = f"c_{node_counter}_{temp_id[:50]}"  # Add prefix and limit length
+            angle = (2 * math.pi * i) / num_nodes
+            x = center_x + radius * math.cos(angle)
+            y = center_y + radius * math.sin(angle)
 
-        node_id_map[label] = temp_id
-        node_counter += 1
+        nodes.append(
+            {
+                "id": node_id,
+                "data": {"label": label},
+                "position": {"x": int(x), "y": int(y)},
+                "type": "default",
+            }
+        )
 
-        # Escape quotes and backticks within the displayed label string
-        # Mermaid handles most other special characters within quotes fine.
-        display_label = label.replace('"', "#quot;").replace("`", "#gt;")
-        mermaid_string += f'  {node_id_map[label]}["{display_label}"]\n'
+    # Step 3: Create edges
+    edges = []
+    edge_id_counter = 0
 
-    # Step 2: Add edges using the generated node IDs
     for triple in triples:
         source_label = str(triple.get("source", "UnknownSource"))
         target_label = str(triple.get("target", "UnknownTarget"))
-        relation = (
-            str(triple.get("relation", "related to"))
-            .replace('"', "#quot;")
-            .replace("`", "#gt;")
-        )
+        relation = str(triple.get("relation", "related to"))
 
-        source_id = node_id_map.get(source_label)
-        target_id = node_id_map.get(target_label)
+        source_id = label_to_id.get(source_label)
+        target_id = label_to_id.get(target_label)
 
-        if source_id and target_id:  # Only add edge if both nodes were mapped
-            mermaid_string += f'  {source_id} --"{relation}"--> {target_id}\n'
-        else:
-            # This case should ideally not happen if all labels are processed above
-            # logger.warning(f"Could not find mapped ID for source '{source_label}' or target '{target_label}' for triple: {triple}")
-            pass  # Silently skip if a node ID wasn't generated (should be rare)
+        if source_id and target_id and source_id != target_id:
+            edges.append(
+                {
+                    "id": f"edge-{edge_id_counter}",
+                    "source": source_id,
+                    "target": target_id,
+                    "label": relation,
+                    "type": "default",
+                }
+            )
+            edge_id_counter += 1
 
-    return mermaid_string
+    return {"nodes": nodes, "edges": edges}
