@@ -240,8 +240,8 @@ Detailed Answer with Markdown Formatting:"""
             cited_sources=[
                 CitationSource(
                     type="mongodb_chunk",
-                    identifier=doc.metadata.get("source_s3_path", "unknown"),
-                    title=doc.metadata.get("source_filename", "Unknown Document"),
+                    identifier=doc.metadata.get("source_s3_path") or "unknown",
+                    title=doc.metadata.get("source_filename") or "Unknown Document",
                     snippet=(
                         doc.page_content[:300] + "..."
                         if len(doc.page_content) > 300
