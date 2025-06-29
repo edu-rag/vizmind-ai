@@ -29,7 +29,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { getMapHistory } from '@/lib/api';
+import { getMapHistory, getConceptMap } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -53,6 +53,8 @@ export function HistorySidebar() {
   const [isLoading, setIsLoading] = useState(false);
   const [hoveredMapId, setHoveredMapId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [displayedMaps, setDisplayedMaps] = useState(8); // Start with 8 maps
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -88,8 +90,33 @@ export function HistorySidebar() {
     }
   };
 
-  const handleMapClick = (mapId: string) => {
-    router.push(`/maps/${mapId}`);
+  const handleMapClick = async (mapId: string) => {
+    if (!jwt) return;
+
+    try {
+      // Find the map item to get the source filename
+      const mapItem = mapHistory.find(item => item.map_id === mapId);
+
+      // Load the map data
+      const result = await getConceptMap(mapId, jwt);
+
+      if (result.data) {
+        // Set as current map and navigate to home, including the source filename
+        const mapWithFilename = {
+          ...result.data,
+          source_filename: mapItem?.source_filename
+        };
+        setCurrentMap(mapWithFilename);
+        router.push('/');
+        toast.success('Map loaded successfully');
+      } else {
+        toast.error('Failed to load concept map');
+      }
+    } catch (error) {
+      console.error('Error loading map:', error);
+      toast.error('Failed to load concept map');
+    }
+
     if (isMobile) {
       setSidebarCollapsed(true);
     }
@@ -141,8 +168,29 @@ export function HistorySidebar() {
       .slice(0, 2);
   };
 
-  // Show recent maps (last 4)
-  const recentMaps = mapHistory.slice(0, 4);
+  // Handle infinite scroll
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+    // Load more when scrolled to 80% of the content
+    if (scrollPercentage > 0.8 && !isLoadingMore && displayedMaps < mapHistory.length) {
+      setIsLoadingMore(true);
+      // Simulate loading delay for better UX
+      setTimeout(() => {
+        setDisplayedMaps(prev => Math.min(prev + 6, mapHistory.length));
+        setIsLoadingMore(false);
+      }, 300);
+    }
+  };
+
+  // Reset displayed maps when map history changes
+  useEffect(() => {
+    setDisplayedMaps(8);
+  }, [mapHistory]);
+
+  // Show displayed maps (with pagination)
+  const visibleMaps = mapHistory.slice(0, displayedMaps);
 
   return (
     <div
@@ -297,12 +345,17 @@ export function HistorySidebar() {
                     <div className="flex items-center space-x-2">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <h3 className="text-responsive-sm font-medium text-foreground">
-                        Recent Maps
+                        My Maps
                       </h3>
+                      {mapHistory.length > 0 && (
+                        <span className="text-responsive-xs text-muted-foreground">
+                          ({mapHistory.length})
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  <ScrollArea className="flex-1 px-4">
+                  <ScrollArea className="flex-1 px-4" onScrollCapture={handleScroll}>
                     {isLoading ? (
                       <div className="space-y-3">
                         {[...Array(4)].map((_, i) => (
@@ -317,7 +370,7 @@ export function HistorySidebar() {
                           </Card>
                         ))}
                       </div>
-                    ) : recentMaps.length === 0 ? (
+                    ) : visibleMaps.length === 0 ? (
                       <div className="text-center text-muted-foreground py-8">
                         <div className="w-16 h-16 mx-auto mb-4 bg-muted/30 rounded-full flex items-center justify-center">
                           <FileText className="h-8 w-8 opacity-50" />
@@ -327,7 +380,7 @@ export function HistorySidebar() {
                       </div>
                     ) : (
                       <div className="space-y-3 pb-4">
-                        {recentMaps.map((item, index) => (
+                        {visibleMaps.map((item, index) => (
                           <div key={item.map_id} className="relative group">
                             <Card
                               className={cn(
@@ -394,17 +447,30 @@ export function HistorySidebar() {
                           </div>
                         ))}
 
-                        {mapHistory.length > 4 && (
-                          <Button
-                            variant="ghost"
-                            className="w-full text-responsive-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => {
-                              // TODO: Implement full history view
-                              toast.info('Full history view coming soon');
-                            }}
-                          >
-                            View all {mapHistory.length} maps
-                          </Button>
+                        {/* Loading more indicator */}
+                        {isLoadingMore && (
+                          <div className="space-y-3">
+                            {[...Array(3)].map((_, i) => (
+                              <Card key={`loading-${i}`} className="p-4">
+                                <div className="flex items-start space-x-3">
+                                  <Skeleton className="h-10 w-10 rounded-lg flex-shrink-0" />
+                                  <div className="flex-1 space-y-2">
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-3 w-20" />
+                                  </div>
+                                </div>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* End indicator */}
+                        {displayedMaps >= mapHistory.length && mapHistory.length > 8 && (
+                          <div className="text-center py-4">
+                            <p className="text-responsive-xs text-muted-foreground">
+                              All {mapHistory.length} maps loaded
+                            </p>
+                          </div>
                         )}
                       </div>
                     )}
