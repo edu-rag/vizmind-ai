@@ -532,10 +532,13 @@ export function FileDropZone() {
                       size="sm"
                       onClick={() => {
                         const pendingFiles = uploadedFiles
-                          .filter(f => f.status === 'pending')
-                          .map(f => f.file);
+                          .filter(f => f.status === 'pending');
                         if (pendingFiles.length > 0) {
-                          processBatchFiles(pendingFiles);
+                          // Remove pending files before processing
+                          setUploadedFiles(prev =>
+                            prev.filter(f => f.status !== 'pending')
+                          );
+                          processBatchFiles(pendingFiles.map(f => f.file));
                         }
                       }}
                       disabled={isProcessing}
