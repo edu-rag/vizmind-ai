@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Send, ExternalLink, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { askQuestion } from '@/lib/api';
+import { askQuestion, getNodeDetails } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -46,16 +46,41 @@ export function NodeDetailPanel() {
 
   useEffect(() => {
     if (selectedNode && selectedNodeData && currentMap && jwt) {
-      // Auto-ask initial question about the node
-      handleAskQuestion(`Tell me about ${selectedNodeData.data.label}`, true);
+      // Auto-fetch node details using the /details endpoint
+      handleGetNodeDetails();
     }
   }, [selectedNode, selectedNodeData, currentMap, jwt]);
 
-  const handleAskQuestion = async (questionText: string, isInitial = false) => {
+  const handleGetNodeDetails = async () => {
     if (!currentMap || !jwt || !selectedNodeData) return;
 
-    const loadingState = isInitial ? setIsLoading : setIsAsking;
-    loadingState(true);
+    setIsLoading(true);
+
+    try {
+      const result = await getNodeDetails(
+        currentMap.mongodb_doc_id,
+        selectedNodeData.data.label,
+        jwt
+      );
+
+      if (result.data) {
+        setAnswer(result.data.answer);
+        setCitedSources(result.data.cited_sources || []);
+      } else {
+        toast.error('Failed to get node details');
+      }
+    } catch (error) {
+      toast.error('Failed to fetch node details');
+      console.error('Node details error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAskQuestion = async (questionText: string) => {
+    if (!currentMap || !jwt || !selectedNodeData) return;
+
+    setIsAsking(true);
 
     try {
       const result = await askQuestion(
@@ -68,9 +93,7 @@ export function NodeDetailPanel() {
       if (result.data) {
         setAnswer(result.data.answer);
         setCitedSources(result.data.cited_sources || []);
-        if (!isInitial) {
-          toast.success('Question answered successfully');
-        }
+        toast.success('Question answered successfully');
       } else {
         toast.error('Failed to get an answer');
       }
@@ -78,7 +101,7 @@ export function NodeDetailPanel() {
       toast.error('Failed to ask question');
       console.error('Question error:', error);
     } finally {
-      loadingState(false);
+      setIsAsking(false);
     }
   };
 
@@ -102,7 +125,7 @@ export function NodeDetailPanel() {
 
   return (
     <Sheet open={isDetailPanelOpen} onOpenChange={handleClose}>
-      <SheetContent 
+      <SheetContent
         className={cn(
           'p-0 flex flex-col',
           isMobile ? 'w-full max-w-full' : 'w-[400px] sm:w-[500px]'
@@ -128,7 +151,7 @@ export function NodeDetailPanel() {
                 <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
                   Generated Answer
                 </h3>
-                
+
                 {isLoading ? (
                   <Card className="spacing-mobile-sm">
                     <div className="space-y-3">

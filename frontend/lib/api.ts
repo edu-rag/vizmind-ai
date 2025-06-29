@@ -114,6 +114,32 @@ export const getConceptMap = async (mapId: string, jwt: string) => {
   }>(`/api/v1/maps/${mapId}`, {}, jwt);
 };
 
+// Get node details using RAG
+export const getNodeDetails = async (
+  mapId: string,
+  nodeQuery: string,
+  jwt: string,
+  topK: number = 3
+) => {
+  const params = new URLSearchParams({
+    map_id: mapId,
+    node_query: nodeQuery,
+    top_k: topK.toString(),
+  });
+
+  return makeRequest<{
+    query: string;
+    answer: string;
+    cited_sources: Array<{
+      type: string;
+      identifier: string;
+      title: string;
+      snippet: string;
+    }>;
+    message: string;
+  }>(`/api/v1/maps/details/?${params.toString()}`, {}, jwt);
+};
+
 // Ask question about concept
 export const askQuestion = async (
   conceptMapId: string,
