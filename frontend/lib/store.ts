@@ -33,6 +33,7 @@ export interface ReactFlowData {
     id: string;
     source: string;
     target: string;
+    type?: string;
     label?: string;
   }>;
 }

@@ -12,6 +12,9 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Panel,
+  MarkerType,
+  Handle,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button } from '@/components/ui/button';
@@ -29,16 +32,26 @@ function ConceptNode({ data, selected }: { data: any; selected: boolean }) {
   return (
     <div
       className={cn(
-        'px-4 py-3 rounded-lg border-2 bg-background transition-all duration-200 min-w-[120px] text-center shadow-sm',
+        'px-4 py-3 rounded-lg border-2 bg-background transition-all duration-200 min-w-[120px] text-center shadow-sm relative',
         'touch-target cursor-pointer',
-        selected 
-          ? 'border-primary shadow-lg scale-105' 
+        selected
+          ? 'border-primary shadow-lg scale-105'
           : 'border-border hover:border-primary/50 hover:shadow-md'
       )}
     >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!w-2 !h-2 !bg-primary"
+      />
       <div className="font-medium text-responsive-sm text-foreground">
         {data.label}
       </div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!w-2 !h-2 !bg-primary"
+      />
     </div>
   );
 }
@@ -63,36 +76,118 @@ export function ConceptMapDisplay() {
   useEffect(() => {
     if (currentMap?.react_flow_data) {
       const { nodes: mapNodes, edges: mapEdges } = currentMap.react_flow_data;
-      
+
+      console.log('ConceptMapDisplay: Raw data from backend:', {
+        nodes: mapNodes.length,
+        edges: mapEdges.length,
+        nodesSample: mapNodes.slice(0, 3),
+        edgesSample: mapEdges.slice(0, 3)
+      });
+
+      // Validate backend data structure
+      if (!Array.isArray(mapNodes) || !Array.isArray(mapEdges)) {
+        console.error('ConceptMapDisplay: Invalid data structure from backend', {
+          nodesType: typeof mapNodes,
+          edgesType: typeof mapEdges,
+          nodesIsArray: Array.isArray(mapNodes),
+          edgesIsArray: Array.isArray(mapEdges)
+        });
+        return;
+      }
+
       // Transform nodes to include custom styling
-      const styledNodes = mapNodes.map((node) => ({
-        ...node,
-        type: 'concept',
-        data: { 
-          ...node.data,
-        },
-        style: {
-          width: 'auto',
-          height: 'auto',
-        },
-      }));
+      const styledNodes = mapNodes.map((node, index) => {
+        // Ensure node has required properties
+        const nodeId = node.id || `node-${index}`;
+        const nodeLabel = node.data?.label || 'Unlabeled Node';
+        const nodePosition = node.position || { x: 100 + (index % 5) * 200, y: 100 + Math.floor(index / 5) * 150 };
+
+        return {
+          id: nodeId,
+          type: 'concept', // Ensure all nodes are of type 'concept'
+          data: {
+            label: nodeLabel,
+          },
+          position: nodePosition,
+          style: {
+            width: 'auto',
+            height: 'auto',
+          },
+        };
+      });
 
       // Transform edges to include custom styling
-      const styledEdges = mapEdges.map((edge) => ({
-        ...edge,
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: 'hsl(var(--primary))' },
-        labelStyle: { 
-          fill: 'hsl(var(--foreground))', 
-          fontSize: isMobile ? 10 : 12,
-          fontWeight: 500,
-        },
-        labelBgStyle: { 
-          fill: 'hsl(var(--background))', 
-          fillOpacity: 0.8,
-        },
-      }));
+      const styledEdges = mapEdges.map((edge, index) => {
+        // Ensure edge has required properties
+        const edgeId = edge.id || `edge-${index}`;
+        const edgeSource = edge.source;
+        const edgeTarget = edge.target;
+        const edgeLabel = edge.label;
+
+        // Validate edge connectivity
+        if (!edgeSource || !edgeTarget) {
+          console.warn('ConceptMapDisplay: Edge missing source or target', edge);
+          return null;
+        }
+
+        // Check if source and target nodes exist
+        const sourceExists = styledNodes.some(node => node.id === edgeSource);
+        const targetExists = styledNodes.some(node => node.id === edgeTarget);
+
+        if (!sourceExists || !targetExists) {
+          console.warn('ConceptMapDisplay: Edge references non-existent nodes', {
+            edge,
+            sourceExists,
+            targetExists,
+            availableNodeIds: styledNodes.map(n => n.id)
+          });
+          return null;
+        }
+
+        return {
+          id: edgeId,
+          source: edgeSource,
+          target: edgeTarget,
+          type: 'default',
+          animated: true,
+          label: edgeLabel,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+            color: 'hsl(var(--primary))',
+          },
+          style: {
+            stroke: 'hsl(var(--primary))',
+            strokeWidth: 2
+          },
+          labelStyle: {
+            fill: 'hsl(var(--foreground))',
+            fontSize: isMobile ? 10 : 12,
+            fontWeight: 500,
+          },
+          labelBgStyle: {
+            fill: 'hsl(var(--background))',
+            fillOpacity: 0.8,
+          },
+        };
+      }).filter((edge): edge is NonNullable<typeof edge> => edge !== null); // Type-safe filter
+
+      console.log('ConceptMapDisplay: Transformed data:', {
+        styledNodes: styledNodes.length,
+        styledEdges: styledEdges.length,
+        nodesSample: styledNodes.slice(0, 3),
+        edgesSample: styledEdges.slice(0, 3)
+      });
+
+      // Log any issues with connectivity
+      if (styledEdges.length < mapEdges.length) {
+        console.warn('ConceptMapDisplay: Some edges were filtered out due to connectivity issues', {
+          originalEdges: mapEdges.length,
+          filteredEdges: styledEdges.length,
+          difference: mapEdges.length - styledEdges.length
+        });
+      }
 
       setNodes(styledNodes);
       setEdges(styledEdges);
@@ -112,18 +207,71 @@ export function ConceptMapDisplay() {
   const handleReset = () => {
     if (currentMap?.react_flow_data) {
       const { nodes: mapNodes, edges: mapEdges } = currentMap.react_flow_data;
-      
-      const styledNodes = mapNodes.map((node) => ({
-        ...node,
-        type: 'concept',
-        data: { ...node.data },
-      }));
 
-      const styledEdges = mapEdges.map((edge) => ({
-        ...edge,
-        type: 'smoothstep',
-        animated: true,
-      }));
+      console.log('ConceptMapDisplay: Resetting view with data:', {
+        nodes: mapNodes.length,
+        edges: mapEdges.length
+      });
+
+      // Use the same transformation logic as in useEffect
+      const styledNodes = mapNodes.map((node, index) => {
+        const nodeId = node.id || `node-${index}`;
+        const nodeLabel = node.data?.label || 'Unlabeled Node';
+        const nodePosition = node.position || { x: 100 + (index % 5) * 200, y: 100 + Math.floor(index / 5) * 150 };
+
+        return {
+          id: nodeId,
+          type: 'concept', // Ensure all nodes are of type 'concept'
+          data: { label: nodeLabel },
+          position: nodePosition,
+          style: {
+            width: 'auto',
+            height: 'auto',
+          },
+        };
+      });
+
+      const styledEdges = mapEdges.map((edge, index) => {
+        const edgeId = edge.id || `edge-${index}`;
+        const edgeSource = edge.source;
+        const edgeTarget = edge.target;
+        const edgeLabel = edge.label;
+
+        if (!edgeSource || !edgeTarget) return null;
+
+        const sourceExists = styledNodes.some(node => node.id === edgeSource);
+        const targetExists = styledNodes.some(node => node.id === edgeTarget);
+
+        if (!sourceExists || !targetExists) return null;
+
+        return {
+          id: edgeId,
+          source: edgeSource,
+          target: edgeTarget,
+          type: 'default',
+          animated: true,
+          label: edgeLabel,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+            color: 'hsl(var(--primary))',
+          },
+          style: {
+            stroke: 'hsl(var(--primary))',
+            strokeWidth: 2
+          },
+          labelStyle: {
+            fill: 'hsl(var(--foreground))',
+            fontSize: isMobile ? 10 : 12,
+            fontWeight: 500,
+          },
+          labelBgStyle: {
+            fill: 'hsl(var(--background))',
+            fillOpacity: 0.8,
+          },
+        };
+      }).filter((edge): edge is NonNullable<typeof edge> => edge !== null);
 
       setNodes(styledNodes);
       setEdges(styledEdges);
@@ -132,7 +280,7 @@ export function ConceptMapDisplay() {
 
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
-    
+
     if (!isFullscreen) {
       // Request fullscreen
       if (document.documentElement.requestFullscreen) {
@@ -147,7 +295,25 @@ export function ConceptMapDisplay() {
   };
 
   if (!currentMap) {
-    return null;
+    return (
+      <div className="flex items-center justify-center h-full text-gray-500">
+        <div className="text-center">
+          <p className="text-lg font-medium">No concept map available</p>
+          <p className="text-sm">Upload a document to generate a concept map</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (nodes.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-500">
+        <div className="text-center">
+          <p className="text-lg font-medium">No concepts found</p>
+          <p className="text-sm">The document may not contain enough conceptual content</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -173,22 +339,22 @@ export function ConceptMapDisplay() {
           nodesConnectable={!isMobile}
           elementsSelectable={true}
         >
-          <Background 
-            variant={BackgroundVariant.Dots} 
-            gap={isMobile ? 15 : 20} 
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={isMobile ? 15 : 20}
             size={1}
             color="hsl(var(--muted-foreground))"
             className="opacity-30"
           />
-          
-          <Controls 
+
+          <Controls
             className="bg-background border border-border rounded-lg shadow-sm"
             showZoom
             showFitView
             showInteractive={!isMobile}
             position={isMobile ? 'bottom-right' : 'bottom-left'}
           />
-          
+
           <Panel position="top-left" className="space-x-2">
             <Card className="p-2">
               <div className={cn(
@@ -205,7 +371,7 @@ export function ConceptMapDisplay() {
                   <RotateCcw className="h-4 w-4" />
                   {!isMobile && <span className="ml-1">Reset</span>}
                 </Button>
-                
+
                 <Button
                   variant="ghost"
                   size={isMobile ? 'icon' : 'sm'}
@@ -224,7 +390,7 @@ export function ConceptMapDisplay() {
                     </span>
                   )}
                 </Button>
-                
+
                 <ThemeToggle size="icon" className="touch-target" />
               </div>
             </Card>

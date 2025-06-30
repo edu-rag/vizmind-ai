@@ -365,11 +365,13 @@ Focus on capturing the conceptual landscape, not the documentary structure.
 
             # Filter triples to keep only conceptual nodes suitable for mind mapping
             conceptual_triples = self._filter_conceptual_triples(all_triples)
-            
+
             logger.info(
                 f"Extracted {len(all_triples)} raw triples, {len(conceptual_triples)} conceptual triples suitable for mind mapping"
             )
-            
+            logger.info(f"DEBUG: All raw triples = {all_triples}")
+            logger.info(f"DEBUG: Filtered conceptual triples = {conceptual_triples}")
+
             return {
                 "raw_triples": conceptual_triples,
                 "error_message": state.get("error_message"),
@@ -439,20 +441,24 @@ Focus on capturing the conceptual landscape, not the documentary structure.
             unique_node_labels = list(nodes)
             node_map = {label: label for label in unique_node_labels}
 
-            if len(unique_node_labels) > 1:  # Apply similarity-based merging for conceptual nodes
+            if (
+                len(unique_node_labels) > 1
+            ):  # Apply similarity-based merging for conceptual nodes
                 node_embeddings = await self._get_node_embeddings_for_similarity(
                     unique_node_labels
                 )
                 cosine_matrix = await asyncio.to_thread(
                     cosine_similarity, node_embeddings
                 )
-                
+
                 # Use higher similarity threshold for conceptual nodes to avoid over-merging
                 # Conceptual nodes should be more distinct in a mind map
                 similarity_threshold = 0.90  # Higher threshold for mind mapping
-                
-                logger.info(f"Applying similarity merging with threshold {similarity_threshold} for {len(unique_node_labels)} conceptual nodes")
-                
+
+                logger.info(
+                    f"Applying similarity merging with threshold {similarity_threshold} for {len(unique_node_labels)} conceptual nodes"
+                )
+
                 for i in range(len(unique_node_labels)):
                     if node_map[unique_node_labels[i]] != unique_node_labels[i]:
                         continue
@@ -463,12 +469,12 @@ Focus on capturing the conceptual landscape, not the documentary structure.
                             # For mind mapping, prefer keeping the shorter, more general term
                             label_i = unique_node_labels[i]
                             label_j = unique_node_labels[j]
-                            
+
                             if len(label_i) <= len(label_j):
                                 keep_label, merge_label = label_i, label_j
                             else:
                                 keep_label, merge_label = label_j, label_i
-                                
+
                             logger.info(
                                 f"    Merging conceptual nodes: '{merge_label}' -> '{keep_label}' (similarity: {cosine_matrix[i,j]:.2f})"
                             )
@@ -479,30 +485,42 @@ Focus on capturing the conceptual landscape, not the documentary structure.
             for triple in normalized_triples_intermediate:
                 source = triple["source"]
                 target = triple["target"]
-                
+
                 # Apply node mappings
                 while node_map.get(source, source) != source:
                     source = node_map[source]
                 while node_map.get(target, target) != target:
                     target = node_map[target]
-                
+
                 # Skip self-loops which don't make sense in mind maps
                 if source != target:
                     merged_triples_final.append(
-                        {"source": source, "target": target, "relation": triple["relation"]}
+                        {
+                            "source": source,
+                            "target": target,
+                            "relation": triple["relation"],
+                        }
                     )
 
             # Remove duplicate triples and bidirectional duplicates for mind mapping
             # In mind maps, we typically want undirected relationships
             final_triples_set = set()
             final_unique_triples = []
-            
+
             for triple in merged_triples_final:
-                source, target, relation = triple["source"], triple["target"], triple["relation"]
-                
+                source, target, relation = (
+                    triple["source"],
+                    triple["target"],
+                    triple["relation"],
+                )
+
                 # Create a normalized tuple for comparison (alphabetically sorted to handle bidirectionality)
-                normalized_tuple = (min(source, target), max(source, target), relation.lower().strip())
-                
+                normalized_tuple = (
+                    min(source, target),
+                    max(source, target),
+                    relation.lower().strip(),
+                )
+
                 if normalized_tuple not in final_triples_set:
                     final_unique_triples.append(triple)
                     final_triples_set.add(normalized_tuple)
@@ -510,6 +528,7 @@ Focus on capturing the conceptual landscape, not the documentary structure.
             logger.info(
                 f"Mind map processing: {len(raw_triples)} raw -> {len(normalized_triples_intermediate)} normalized -> {len(final_unique_triples)} final unique conceptual relationships"
             )
+            logger.info(f"DEBUG: Final processed triples = {final_unique_triples}")
             return {"processed_triples": final_unique_triples, "error_message": None}
 
         except Exception as e:
@@ -524,16 +543,39 @@ Focus on capturing the conceptual landscape, not the documentary structure.
         )
         try:
             processed_triples = state.get("processed_triples", [])
+            logger.info(f"DEBUG: processed_triples = {processed_triples}")
+            logger.info(
+                f"DEBUG: Number of processed_triples = {len(processed_triples)}"
+            )
+
             if not processed_triples:  # ... (handle no triples) ...
+                logger.warning("No processed triples found for React Flow generation")
                 react_flow_data = await asyncio.to_thread(generate_react_flow_data, [])
+                logger.info(f"DEBUG: Empty react_flow_data = {react_flow_data}")
                 return {
                     "react_flow_data": react_flow_data,
                     "error_message": state.get("error_message")
                     or "No processed triples for React Flow.",
                 }
+
+            logger.info(
+                f"Generating React Flow data from {len(processed_triples)} processed triples"
+            )
             react_flow_data = await asyncio.to_thread(
                 generate_react_flow_data, processed_triples
             )
+            logger.info(f"DEBUG: Generated react_flow_data = {react_flow_data}")
+            logger.info(
+                f"DEBUG: react_flow_data keys = {react_flow_data.keys() if react_flow_data else 'None'}"
+            )
+            if react_flow_data and "edges" in react_flow_data:
+                logger.info(
+                    f"DEBUG: Number of edges generated = {len(react_flow_data['edges'])}"
+                )
+                logger.info(
+                    f"DEBUG: First few edges = {react_flow_data['edges'][:3] if react_flow_data['edges'] else 'No edges'}"
+                )
+
             return {"react_flow_data": react_flow_data, "error_message": None}
         except Exception as e:
             logger.error(f"Error in generate_react_flow: {e}", exc_info=True)
@@ -658,22 +700,22 @@ Focus on capturing the conceptual landscape, not the documentary structure.
         # Filter out common non-conceptual patterns
         non_conceptual_patterns = [
             r"^figure\s+\d+",  # Figure 1, Figure 2.1, etc.
-            r"^table\s+\d+",   # Table 1, Table 2.1, etc.
-            r"^section\s+\d+", # Section 1, Section 2.1, etc.
-            r"^chapter\s+\d+", # Chapter 1, Chapter 2, etc.
-            r"^page\s+\d+",    # Page 1, Page 123, etc.
-            r"^reference\s*\[?\d+\]?", # Reference 1, Reference [1], etc.
-            r"^\[?\d+\]?$",    # [1], 2, [123], etc.
-            r"^example\s*\d*$", # Example, Example 1, etc.
-            r"^appendix\s+[a-z]?", # Appendix, Appendix A, etc.
-            r"et\s+al\.?$",    # Smith et al., Jones et al
-            r"^\d{4}$",        # Years like 2023, 2024
+            r"^table\s+\d+",  # Table 1, Table 2.1, etc.
+            r"^section\s+\d+",  # Section 1, Section 2.1, etc.
+            r"^chapter\s+\d+",  # Chapter 1, Chapter 2, etc.
+            r"^page\s+\d+",  # Page 1, Page 123, etc.
+            r"^reference\s*\[?\d+\]?",  # Reference 1, Reference [1], etc.
+            r"^\[?\d+\]?$",  # [1], 2, [123], etc.
+            r"^example\s*\d*$",  # Example, Example 1, etc.
+            r"^appendix\s+[a-z]?",  # Appendix, Appendix A, etc.
+            r"et\s+al\.?$",  # Smith et al., Jones et al
+            r"^\d{4}$",  # Years like 2023, 2024
             r"^vol\.?\s*\d+",  # Vol. 1, Volume 2, etc.
             r"^pp?\.?\s*\d+",  # p. 123, pp. 45-67, etc.
-            r"^isbn",          # ISBN numbers
-            r"^doi:",          # DOI references
-            r"http[s]?://",   # URLs
-            r"^www\.",         # Web addresses
+            r"^isbn",  # ISBN numbers
+            r"^doi:",  # DOI references
+            r"http[s]?://",  # URLs
+            r"^www\.",  # Web addresses
         ]
 
         # Check against patterns
@@ -837,7 +879,9 @@ Focus on capturing the conceptual landscape, not the documentary structure.
 
         return True
 
-    def _filter_conceptual_triples(self, triples: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def _filter_conceptual_triples(
+        self, triples: List[Dict[str, str]]
+    ) -> List[Dict[str, str]]:
         """
         Filters triples to keep only those with conceptual nodes suitable for mind mapping.
         """

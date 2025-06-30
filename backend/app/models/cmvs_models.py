@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+
 try:
     from pydantic.v1 import BaseModel as LangchainBaseModel
 except ImportError:
