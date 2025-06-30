@@ -16,7 +16,11 @@ from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_huggingface import HuggingFaceEmbeddings  # Your chosen embedding model
 from langchain_groq import ChatGroq  # Your chosen LLM
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+from langchain_core.runnables import (
+    RunnablePassthrough,
+    RunnableParallel,
+    RunnableLambda,
+)
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document  # For typing source documents
 
@@ -123,28 +127,71 @@ async def get_rag_details_for_node(
             f"RAG: Initialized MongoDBAtlasVectorSearch with index '{settings.MONGODB_ATLAS_VECTOR_SEARCH_INDEX_NAME}'."
         )
 
-        # 2. Create a Retriever with pre-filtering
+        # 2. Create a Retriever with pre-filtering and enhanced search
         # The pre_filter stage in Atlas Vector Search uses MQL (MongoDB Query Language).
         # Ensure 'user_id' and 'concept_map_id' are properly indexed as filter fields in your Atlas Search Index.
         retriever_filter = {"user_id": user_id, "concept_map_id": concept_map_id}
 
+        # First, try to find documents that directly mention the node query
+        # This will help with context awareness for specific topics like "Introduction"
+        enhanced_query = node_query
+
+        # For specific section names, enhance the query to find relevant content
+        if any(
+            term in node_query.lower()
+            for term in [
+                "introduction",
+                "overview",
+                "conclusion",
+                "summary",
+                "definition",
+            ]
+        ):
+            # Add variations to help find section-specific content
+            enhanced_query = f"{node_query} section content overview"
+
         retriever = vector_store.as_retriever(
-            search_type="similarity",  # Or "mmr" for max marginal relevance
+            search_type="mmr",  # Use MMR for more diverse results
             search_kwargs={
-                "k": top_k_retriever,
+                "k": top_k_retriever * 2,  # Get more candidates for better filtering
+                "fetch_k": top_k_retriever * 4,  # Fetch even more for MMR diversity
+                "lambda_mult": 0.7,  # Balance between relevance and diversity
                 "pre_filter": retriever_filter,  # Apply pre-filter
-                # "post_filter_pipeline": [{"$match": retriever_filter_mql}] # Alternative for post-filtering
             },
             verbose=True,
         )
-        logger.info(
-            f"RAG: Retriever created with k={top_k_retriever} and filter for user/map."
+
+        # Also create a secondary retriever for backup if first doesn't find relevant content
+        backup_retriever = vector_store.as_retriever(
+            search_type="similarity",
+            search_kwargs={
+                "k": top_k_retriever,
+                "pre_filter": retriever_filter,
+            },
+            verbose=True,
         )
 
-        # 3. Define Prompt Template
-        template = """You are an intelligent assistant that provides detailed explanations about concept map nodes based on retrieved document context.
+        logger.info(
+            f"RAG: Enhanced retriever created with MMR search for query '{enhanced_query}'"
+        )
 
-Your task is to provide a comprehensive and detailed explanation about the concept or topic being asked about using proper markdown formatting.
+        # 3. Define enhanced prompt template with better context awareness
+        template = """You are an intelligent assistant that provides detailed explanations about concept map nodes based on retrieved document context with hierarchical structure awareness.
+
+Your task is to provide a comprehensive and detailed explanation about the concept or topic being asked about using proper markdown formatting. You have access to structured document content with section hierarchies to provide contextually accurate answers.
+
+CRITICAL CONTEXT AWARENESS RULES:
+- ALWAYS prioritize content that directly relates to the specific concept or section being asked about
+- If the query mentions a specific section (like "Introduction", "Overview", "Conclusion"), focus on content from that section
+- Pay attention to document structure indicators (📋 Document Structure) that show where content appears
+- Use the section context to provide accurate answers, not generic information
+- If multiple sections are available, prioritize the most relevant one to the query
+
+HIERARCHICAL CONTEXT AWARENESS:
+- Pay attention to document structure indicators (📋 Document Structure) that show where content appears in the document hierarchy
+- Use section context to provide more accurate and contextually relevant explanations
+- Reference the document structure when helpful for understanding relationships between concepts
+- When asked about a specific section, focus ONLY on content from that section
 
 IMPORTANT LANGUAGE INSTRUCTIONS:
 - If the retrieved context is primarily in Bahasa Indonesia, respond in Bahasa Indonesia
@@ -161,58 +208,186 @@ MARKDOWN FORMATTING REQUIREMENTS:
 - Use > for important quotes or key definitions
 - Use `code` formatting for technical terms if applicable
 
-RESPONSE STRUCTURE:
-1. Start with a main title using # (the concept name)
-2. Provide a clear definition section using ##
-3. Include key characteristics or properties using ##
-4. Add relationships to other concepts if available using ##
-5. Include examples or applications if mentioned using ##
-6. If insufficient information, clearly state limitations
-
-Example structure:
-# Concept Name
-
-## Definisi / Definition
-Clear explanation of what the concept is...
-
-## Karakteristik Utama / Key Characteristics
-- **Point 1**: Explanation
-- **Point 2**: Explanation
-
-## Hubungan dengan Konsep Lain / Relationships
-How this concept relates to others...
-
-## Contoh dan Aplikasi / Examples and Applications
-Real-world examples or applications...
+RESPONSE STRUCTURE WITH CONTEXT AWARENESS:
+1. Start with a main title using # (the concept or section name)
+2. If asking about a specific section, focus the answer on that section's content
+3. Provide information that directly relates to the query context
+4. Include relevant details from the hierarchical structure
+5. Reference document sections when providing context using ##
+6. If insufficient relevant information, clearly state limitations
 
 Question: {question}
 
-Retrieved Context:
+Retrieved Context with Hierarchical Structure:
 {context}
 
-Detailed Answer with Markdown Formatting:"""
+Detailed Answer with Context Awareness:"""
         prompt = ChatPromptTemplate.from_template(template)
 
-        # 4. Helper function to format retrieved documents
+        # 4. Enhanced helper function to format retrieved documents with better context matching
         def format_docs(docs: List[Document]) -> str:
             if not docs:
                 return "No relevant documents found."
+
+            # Score documents by relevance to the query
+            scored_docs = []
+            query_lower = node_query.lower()
+
+            for doc in docs:
+                relevance_score = 0
+                content_lower = doc.page_content.lower()
+
+                # Check for direct mentions of the query terms
+                for term in query_lower.split():
+                    if term in content_lower:
+                        relevance_score += 2
+
+                # Check section relevance
+                section_title = doc.metadata.get("section_title", "").lower()
+                parent_headers = doc.metadata.get("parent_headers", [])
+
+                # Higher score for exact section matches
+                if query_lower in section_title:
+                    relevance_score += 10
+
+                # Check parent headers
+                for header in parent_headers:
+                    header_text = header.get("text", "").lower()
+                    if query_lower in header_text:
+                        relevance_score += 5
+                    for term in query_lower.split():
+                        if term in header_text:
+                            relevance_score += 1
+
+                # Check if this is introduction/overview content
+                if any(
+                    term in query_lower
+                    for term in ["introduction", "overview", "intro"]
+                ):
+                    if any(
+                        term in content_lower
+                        for term in [
+                            "introduction",
+                            "overview",
+                            "intro",
+                            "pengenalan",
+                            "pendahuluan",
+                        ]
+                    ):
+                        relevance_score += 5
+
+                scored_docs.append((doc, relevance_score))
+
+            # Sort by relevance score and take the most relevant
+            scored_docs.sort(key=lambda x: x[1], reverse=True)
+            docs = [doc for doc, score in scored_docs[:top_k_retriever]]
 
             formatted_chunks = []
             for i, doc in enumerate(docs, 1):
                 source_info = ""
                 if doc.metadata.get("source_filename"):
-                    source_info = f" (Source: {doc.metadata['source_filename']})"
+                    source_info = f" (Source: {doc.metadata['source_filename']}"
+                    if doc.metadata.get("page_number"):
+                        source_info += f", Page {doc.metadata['page_number']}"
+                    source_info += ")"
+
+                # Add hierarchical context if available
+                content = doc.page_content
+                hierarchy_info = ""
+
+                # Extract section and parent headers from metadata
+                section_title = doc.metadata.get("section_title", "")
+                parent_headers = doc.metadata.get("parent_headers", [])
+
+                if parent_headers or section_title:
+                    hierarchy_path = []
+                    if parent_headers:
+                        hierarchy_path.extend(
+                            [h.get("text", str(h)) for h in parent_headers]
+                        )
+                    if section_title and section_title not in hierarchy_path:
+                        hierarchy_path.append(section_title)
+
+                    if hierarchy_path:
+                        hierarchy_info = (
+                            f"\n📋 Document Structure: {' → '.join(hierarchy_path)}\n"
+                        )
 
                 formatted_chunks.append(
-                    f"Document {i}{source_info}:\n{doc.page_content}"
+                    f"Document {i}{source_info}:{hierarchy_info}\n{content}"
                 )
 
             format = "\n\n" + "=" * 50 + "\n\n".join(formatted_chunks)
-            print(format)
             return format
 
-        # 5. Construct RAG Chain using LCEL
+        # 5. Enhanced retrieval function that tries multiple strategies
+        async def enhanced_retrieve(query: str) -> List[Document]:
+            try:
+                # First attempt with enhanced query
+                docs = await retriever.ainvoke(enhanced_query)
+
+                # Check if we got relevant results
+                if docs:
+                    # Filter docs by relevance
+                    relevant_docs = []
+                    query_terms = set(query.lower().split())
+
+                    for doc in docs:
+                        content_lower = doc.page_content.lower()
+                        section_title = doc.metadata.get("section_title", "").lower()
+
+                        # Check if document is relevant
+                        is_relevant = False
+
+                        # Direct term matches
+                        if any(term in content_lower for term in query_terms):
+                            is_relevant = True
+
+                        # Section title matches
+                        if any(term in section_title for term in query_terms):
+                            is_relevant = True
+
+                        # Special handling for section queries
+                        if any(
+                            term in query.lower()
+                            for term in ["introduction", "overview", "conclusion"]
+                        ):
+                            if any(
+                                term in content_lower
+                                for term in [
+                                    "introduction",
+                                    "overview",
+                                    "conclusion",
+                                    "pengenalan",
+                                    "pendahuluan",
+                                    "kesimpulan",
+                                ]
+                            ):
+                                is_relevant = True
+
+                        if is_relevant:
+                            relevant_docs.append(doc)
+
+                    if relevant_docs:
+                        return relevant_docs[:top_k_retriever]
+
+                # If no relevant docs, try backup retriever with original query
+                logger.info(
+                    "Primary retrieval didn't find relevant docs, trying backup retriever"
+                )
+                backup_docs = await backup_retriever.ainvoke(query)
+                return backup_docs[:top_k_retriever] if backup_docs else []
+
+            except Exception as e:
+                logger.error(f"Error in enhanced retrieval: {e}")
+                # Final fallback to basic similarity search
+                try:
+                    return await backup_retriever.ainvoke(query)
+                except Exception as e2:
+                    logger.error(f"Backup retrieval also failed: {e2}")
+                    return []
+
+        # 6. Construct enhanced RAG Chain using LCEL with better retrieval
         rag_chain_from_docs = (
             RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
             | prompt
@@ -220,20 +395,53 @@ Detailed Answer with Markdown Formatting:"""
             | StrOutputParser()
         )
 
+        # Use enhanced retrieval instead of basic retriever
         rag_chain_with_source = RunnableParallel(
-            {"context": retriever, "question": RunnablePassthrough()}
+            {
+                "context": RunnableLambda(enhanced_retrieve),
+                "question": RunnablePassthrough(),
+            }
         ).assign(answer=rag_chain_from_docs)
 
-        logger.info(f"RAG: Invoking chain for question: '{node_query}'")
-        # Invoke the chain asynchronously.
-        # Note: Some parts of the chain might involve sync calls if not fully async compatible (e.g. some retrievers)
-        # Langchain's ainvoke handles this.
+        logger.info(f"RAG: Invoking enhanced chain for question: '{node_query}'")
+        # Invoke the chain asynchronously with enhanced retrieval
         response_data = await rag_chain_with_source.ainvoke(node_query)
 
         answer = response_data.get("answer", "No answer generated.")
         source_documents: List[Document] = response_data.get("context", [])
 
-        logger.info(f"RAG: Successfully generated answer for '{node_query}'.")
+        logger.info(
+            f"RAG: Successfully generated answer for '{node_query}'. Retrieved {len(source_documents)} documents."
+        )
+
+        # Log document relevance for debugging
+        for i, doc in enumerate(source_documents[:3]):  # Log first 3 docs
+            section_info = doc.metadata.get("section_title", "N/A")
+            logger.debug(
+                f"Retrieved doc {i+1}: Section='{section_info}', Content preview: {doc.page_content[:100]}..."
+            )
+
+        # Helper function to build citation title with hierarchical context
+        def build_citation_title(metadata: dict) -> str:
+            filename = metadata.get("source_filename", "Unknown Document")
+            section_title = metadata.get("section_title", "")
+            parent_headers = metadata.get("parent_headers", [])
+
+            title = filename
+            if parent_headers or section_title:
+                hierarchy_path = []
+                if parent_headers:
+                    hierarchy_path.extend(
+                        [h.get("text", str(h)) for h in parent_headers]
+                    )
+                if section_title and section_title not in hierarchy_path:
+                    hierarchy_path.append(section_title)
+
+                if hierarchy_path:
+                    title += f" - {' → '.join(hierarchy_path)}"
+
+            return title
+
         return NodeDetailResponse(
             query=node_query,
             answer=answer,
@@ -241,7 +449,7 @@ Detailed Answer with Markdown Formatting:"""
                 CitationSource(
                     type="mongodb_chunk",
                     identifier=doc.metadata.get("source_s3_path") or "unknown",
-                    title=doc.metadata.get("source_filename") or "Unknown Document",
+                    title=build_citation_title(doc.metadata),
                     snippet=(
                         doc.page_content[:300] + "..."
                         if len(doc.page_content) > 300
@@ -251,7 +459,7 @@ Detailed Answer with Markdown Formatting:"""
                 for doc in source_documents
             ],
             search_performed="document_only",
-            message="Successfully retrieved detailed information from uploaded documents.",
+            message="Successfully retrieved detailed information from uploaded documents with hierarchical context.",
         )
 
     except Exception as e:

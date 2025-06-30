@@ -18,7 +18,10 @@ from app.models.cmvs_models import (
     AttachmentInfo,
 )
 from app.api.v1.deps import get_current_active_user
-from app.services.pdf_service import extract_text_from_pdf_bytes
+from app.services.pdf_service import (
+    extract_text_from_pdf_bytes,
+    extract_structured_text_from_pdf_bytes,
+)
 from app.services.s3_service import S3Service
 from app.services.cmvs_service import (
     get_node_details_with_rag,
@@ -62,13 +65,8 @@ async def get_map_history_endpoint(
 
         history = []
         for map_doc in maps_cursor:
-            # Support both new unified structure and legacy single file structure
-            if "unified_title" in map_doc:
-                title = map_doc["unified_title"]
-            elif "original_filename" in map_doc:
-                title = map_doc["original_filename"]
-            else:
-                title = "Unknown"
+            # Use unified title structure
+            title = map_doc.get("unified_title", "Unknown")
 
             history.append(
                 {
@@ -218,7 +216,11 @@ async def generate_concept_map_secure_endpoint(
                 )
 
             # Text Extraction
-            extracted_text = await extract_text_from_pdf_bytes(pdf_bytes)
+            extracted_data = await extract_structured_text_from_pdf_bytes(pdf_bytes)
+            extracted_text = extracted_data["plain_text"]
+            hierarchical_content = extracted_data["structured_content"]
+            document_metadata = extracted_data["metadata"]
+
             if not extracted_text.strip():
                 logger.warning(
                     f"No text extracted from PDF '{filename}' for user '{current_user.email}'."
@@ -247,6 +249,8 @@ async def generate_concept_map_secure_endpoint(
                     "filename": filename,
                     "s3_path": s3_file_path,
                     "extracted_text": extracted_text,
+                    "structured_content": hierarchical_content,
+                    "metadata": document_metadata,
                 }
             )
 
@@ -287,7 +291,6 @@ async def generate_concept_map_secure_endpoint(
             original_text=combined_text,
             attachments=attachment_infos,
             user_id=current_user.id,
-            text_chunks=[],
             embedded_chunks=[],
             raw_triples=[],
             processed_triples=[],

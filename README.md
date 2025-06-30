@@ -188,7 +188,7 @@ graph TD
     subgraph CMVS_LangGraph [CMVS LangGraph Pipeline]
         direction LR
         J_Start[Start] --> J1[chunk_text <br> Original Text -> Chunks];
-        J1 --> J2[embed_text_chunks <br> Chunks -> Embedded Chunks];
+        J1 --> J2[embed_hierarchical_chunks <br> Hierarchical Chunks -> Embedded Chunks];
         J2 --> J3[extract_main_concept_map <br> Original Text -> LLM -> Main Map Triples];
         J3 --> J4[process_main_map_graph <br> Normalize, Merge Nodes];
         J4 --> J5[generate_main_map_mermaid <br> Triples -> Mermaid Code];
@@ -220,7 +220,7 @@ This **flowchart** details the pipeline for generating a concept map from upload
 3.  **CMVS LangGraph Invocation**: The backend then invokes the CMVS LangGraph pipeline (managed by `CMVS Service`).
 4.  **CMVS LangGraph Internal Flow** (represented as a subgraph):
     * `chunk_text`: The input text (from PDFs) is divided into smaller, semantically coherent chunks.
-    * `embed_text_chunks`: Each text chunk is converted into a vector embedding using a sentence transformer model. These embeddings and their corresponding text are prepared for storage.
+    * `embed_hierarchical_chunks`: Each hierarchical chunk is converted into a vector embedding using a sentence transformer model. These embeddings and their corresponding text are prepared for storage.
     * `extract_main_concept_map`: This crucial step takes the **original full text** (or a significant portion) and uses an LLM (Groq) to extract triples (`source`, `target`, `relation`) that represent the **main ideas and high-level structure** of the document, rather than a granular breakdown. This aims to create a mind-map style overview.
     * `process_main_map_graph`: The raw triples from the LLM are processed. This involves normalizing concept labels (e.g., lowercasing, stemming) and merging duplicate or highly similar concept nodes to create a cleaner graph structure.
     * `generate_main_map_mermaid`: The processed graph (list of unique triples) is converted into Mermaid diagram syntax, suitable for rendering as a visual concept map on the frontend.

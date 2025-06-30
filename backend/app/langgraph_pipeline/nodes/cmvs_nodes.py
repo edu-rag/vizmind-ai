@@ -18,6 +18,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from app.core.config import settings, logger
 from app.langgraph_pipeline.state import GraphState, EmbeddedChunk
 from app.models.cmvs_models import ConceptTripleLLM, ExtractedTriplesLLM
+
 from app.db.mongodb_utils import get_db
 from app.utils.cmvs_helpers import normalize_label, generate_react_flow_data
 
@@ -42,19 +43,6 @@ class CMVSNodes:
             groq_api_key=groq_api_key,
             model_name=settings.LLM_MODEL_NAME_GROQ,
         )
-        try:
-            self.structured_llm = self.llm.with_structured_output(ExtractedTriplesLLM)
-            self.use_structured_output = True
-            logger.info("Using structured output for triple extraction.")
-        except Exception as e:
-            logger.warning(
-                f"Structured output for ExtractedTriplesLLM not fully compatible or available, may use fallback: {e}"
-            )
-            self.structured_llm = (
-                None  # Fallback to manual parsing if this specific model fails
-            )
-            self.use_structured_output = False
-
         self.embedding_model_lc = HuggingFaceEmbeddings(
             model_name=embedding_model_name,
         )
@@ -64,523 +52,354 @@ class CMVSNodes:
         self.similarity_embedding_model = SentenceTransformer(embedding_model_name)
         logger.info("CMVSNodes initialized.")
 
-    def _parse_triples_from_text(self, llm_output_text: str) -> List[Dict[str, str]]:
-        """
-        Robustly parse triples from LLM text response, looking for JSON.
-        """
-        triples = []
-        # Ensure llm_output_text is a string
-        if not isinstance(llm_output_text, str):
-            logger.warning(
-                f"LLM output is not a string: {type(llm_output_text)}. Cannot parse triples."
-            )
-            return []
-
-        try:
-            # Attempt to find a JSON block within the text that matches the expected structure
-            # This regex is a bit more flexible for finding the JSON list of triples
-            json_match = re.search(
-                r'{\s*"triples"\s*:\s*\[.*?\]\s*}', llm_output_text, re.DOTALL
-            )
-            if json_match:
-                json_str = json_match.group(0)
-                logger.debug(f"Found JSON block for triples: {json_str}")
-                data = json.loads(json_str)
-                if "triples" in data and isinstance(data["triples"], list):
-                    for triple_item in data["triples"]:
-                        if (
-                            isinstance(triple_item, dict)
-                            and "source" in triple_item
-                            and "target" in triple_item
-                            and "relation" in triple_item
-                        ):
-                            triples.append(
-                                {
-                                    "source": str(triple_item["source"]),
-                                    "target": str(triple_item["target"]),
-                                    "relation": str(triple_item["relation"]),
-                                }
-                            )
-                    logger.info(
-                        f"Successfully parsed {len(triples)} triples from JSON block."
-                    )
-                    return triples
-
-            # If no specific block found, try to parse the whole string if it looks like JSON
-            # This is a fallback and might be less reliable
-            logger.debug(
-                "No specific '{\"triples\": [...]}' block found, attempting to parse entire output as JSON if it starts with { or [."
-            )
-            stripped_output = llm_output_text.strip()
-            if stripped_output.startswith("{") and stripped_output.endswith("}"):
-                data = json.loads(stripped_output)
-                if "triples" in data and isinstance(
-                    data["triples"], list
-                ):  # Check again for structure
-                    for triple_item in data["triples"]:
-                        if (
-                            isinstance(triple_item, dict)
-                            and "source" in triple_item
-                            and "target" in triple_item
-                            and "relation" in triple_item
-                        ):
-                            triples.append(
-                                {
-                                    "source": str(triple_item["source"]),
-                                    "target": str(triple_item["target"]),
-                                    "relation": str(triple_item["relation"]),
-                                }
-                            )
-                    logger.info(
-                        f"Successfully parsed {len(triples)} triples from full text JSON."
-                    )
-                    return triples
-
-            logger.warning(
-                "Could not find or parse a valid JSON structure for triples in LLM output."
-            )
-            logger.debug(
-                f"LLM output that failed flexible parsing: {llm_output_text[:500]}..."
-            )
-
-        except json.JSONDecodeError as e:
-            logger.error(f"JSONDecodeError while parsing triples from text: {e}")
-            logger.debug(
-                f"LLM Raw Output (JSONDecodeError): {llm_output_text[:500]}..."
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error while parsing triples: {e}", exc_info=True)
-        return triples
-
     async def chunk_text(self, state: GraphState) -> Dict[str, Any]:
         attachments = state.get("attachments", [])
         attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Chunking Text (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Hierarchical Chunking Text (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
             text = state["original_text"]
             if not text or not text.strip():
                 return {
                     "error_message": "Input text is empty.",
-                    "text_chunks": [],
-                    "embedded_chunks": [],  # Ensure this is initialized
+                    "hierarchical_chunks": [],
+                    "embedded_chunks": [],
                 }
-            chunks = await asyncio.to_thread(self.text_splitter.split_text, text)
-            logger.info(
-                f"Text chunked into {len(chunks)} parts from {len(attachments)} attachment(s)."
+
+            # First, create hierarchical chunks based on document structure
+            hierarchical_chunks = await self._create_hierarchical_chunks(attachments)
+
+            # Also create semantic chunks for fallback/comparison
+            semantic_chunks = await asyncio.to_thread(
+                self.text_splitter.split_text, text
             )
+
+            logger.info(
+                f"Created {len(hierarchical_chunks)} hierarchical chunks and {len(semantic_chunks)} semantic chunks from {len(attachments)} attachment(s)."
+            )
+
             return {
-                "text_chunks": chunks,
+                "hierarchical_chunks": hierarchical_chunks,
                 "error_message": None,
                 "embedded_chunks": state.get("embedded_chunks", []),
-            }  # Preserve existing if any
+            }
         except Exception as e:
-            logger.error(f"Error in chunk_text: {e}", exc_info=True)
+            logger.error(f"Error in hierarchical chunk_text: {e}", exc_info=True)
             return {
                 "error_message": str(e),
-                "text_chunks": [],
+                "hierarchical_chunks": [],
                 "embedded_chunks": state.get("embedded_chunks", []),
             }
 
-    async def embed_text_chunks(self, state: GraphState) -> Dict[str, Any]:
-        attachments = state.get("attachments", [])
-        attachment_names = [att.get("filename", "Unknown") for att in attachments]
+    async def _create_hierarchical_chunks(
+        self, attachments: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Create hierarchical chunks based on document structure (headers, sections).
+        Uses the new hierarchical structured_content format for context-aware chunking.
+        """
+        from app.langgraph_pipeline.state import HierarchicalChunk
+
+        hierarchical_chunks = []
+
+        for attachment in attachments:
+            # Use hierarchical structure
+            hierarchical_content = attachment.get("structured_content")
+            filename = attachment.get("filename", "Unknown")
+
+            if hierarchical_content:
+                # Process hierarchical structure
+                chunk_index = 0
+                chunks_from_hierarchy = await self._process_hierarchical_node(
+                    hierarchical_content, [], filename, chunk_index
+                )
+                hierarchical_chunks.extend(chunks_from_hierarchy)
+
+            else:
+                # Final fallback to plain text chunking
+                plain_text = attachment.get("extracted_text", "")
+                if plain_text:
+                    semantic_chunks = await asyncio.to_thread(
+                        self.text_splitter.split_text, plain_text
+                    )
+                    for i, chunk in enumerate(semantic_chunks):
+                        hierarchical_chunks.append(
+                            HierarchicalChunk(
+                                text=chunk,
+                                hierarchy_level=4,  # Body text level
+                                parent_headers=[],
+                                section_title=None,
+                                chunk_index=len(hierarchical_chunks),
+                                source_filename=filename,
+                                page_number=None,
+                            )
+                        )
+
         logger.info(
-            f"--- Node: Embedding Text Chunks (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
+            f"Created {len(hierarchical_chunks)} hierarchical chunks with structure-aware segmentation"
         )
-        try:
-            text_chunks = state.get("text_chunks")
-            if not text_chunks:
-                logger.info("No text chunks to embed.")
-                return {
-                    "embedded_chunks": []
-                }  # Return empty list, don't overwrite other state
+        return hierarchical_chunks
 
-            embeddings_list = await asyncio.to_thread(
-                self.embedding_model_lc.embed_documents, text_chunks
-            )
+    async def _process_hierarchical_node(
+        self,
+        node: Dict[str, Any],
+        parent_headers: List[Dict[str, Any]],
+        filename: str,
+        chunk_index: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Recursively process a hierarchical node to create chunks with proper context.
+        """
+        from app.langgraph_pipeline.state import HierarchicalChunk
 
-            # Determine source file for each chunk by analyzing the text content
-            embedded_chunks_data: List[EmbeddedChunk] = []
-            for i, chunk_text in enumerate(text_chunks):
-                # Try to determine which attachment this chunk came from
-                source_filename = None
-                source_s3_path = None
+        chunks = []
+        title = node.get("title", "")
+        text = node.get("text", "")
+        children = node.get("children", [])
 
-                # Look for document separator patterns in the chunk
-                for attachment in attachments:
-                    filename = attachment.get("filename", "")
-                    if f"--- Document: {filename} ---" in chunk_text:
-                        source_filename = filename
-                        source_s3_path = attachment.get("s3_path")
-                        break
+        # Create header info for this node
+        current_header = {
+            "text": title,
+            "level": len(parent_headers) + 1 if parent_headers else 1,
+        }
 
-                # If we can't determine from separator, try to match against original text segments
-                if not source_filename and attachments:
-                    # For chunks that don't contain separators, try to match against attachment texts
-                    chunk_clean = chunk_text.replace(f"--- Document:", "").strip()
-                    max_overlap = 0
-                    best_match = None
-
-                    for attachment in attachments:
-                        attachment_text = attachment.get("extracted_text", "")
-                        if attachment_text and chunk_clean in attachment_text:
-                            overlap = len(chunk_clean)
-                            if overlap > max_overlap:
-                                max_overlap = overlap
-                                best_match = attachment
-
-                    if best_match:
-                        source_filename = best_match.get("filename")
-                        source_s3_path = best_match.get("s3_path")
-
-                embedded_chunks_data.append(
-                    EmbeddedChunk(
-                        text=chunk_text,
-                        embedding=embeddings_list[i],
-                        source_filename=source_filename,
-                        source_s3_path=source_s3_path,
+        # Add chunk for this node's content if it has substantial text
+        if text and len(text.strip()) > 50:
+            # Determine appropriate chunk size based on content
+            if len(text) > 2000:
+                # Split large content into smaller chunks while preserving context
+                text_chunks = await asyncio.to_thread(
+                    self.text_splitter.split_text, text
+                )
+                for chunk_text in text_chunks:
+                    chunks.append(
+                        HierarchicalChunk(
+                            text=chunk_text,
+                            hierarchy_level=len(parent_headers) + 1,
+                            parent_headers=parent_headers.copy(),
+                            section_title=title,
+                            chunk_index=chunk_index,
+                            source_filename=filename,
+                            page_number=None,
+                        )
+                    )
+                    chunk_index += 1
+            else:
+                # Keep as single chunk with hierarchical context
+                chunks.append(
+                    HierarchicalChunk(
+                        text=text,
+                        hierarchy_level=len(parent_headers) + 1,
+                        parent_headers=parent_headers.copy(),
+                        section_title=title,
+                        chunk_index=chunk_index,
+                        source_filename=filename,
+                        page_number=None,
                     )
                 )
+                chunk_index += 1
 
-            logger.info(
-                f"Successfully embedded {len(embedded_chunks_data)} text chunks from {len(attachments)} attachment(s)."
+        # Process children with updated parent headers
+        new_parent_headers = (
+            parent_headers + [current_header] if title else parent_headers
+        )
+        for child in children:
+            child_chunks = await self._process_hierarchical_node(
+                child, new_parent_headers, filename, chunk_index
             )
-            return {"embedded_chunks": embedded_chunks_data}
-        except Exception as e:
-            logger.error(f"Error in embed_text_chunks: {e}", exc_info=True)
-            return {
-                "error_message": f"Failed to embed chunks: {str(e)}",  # Add to error message
-                "embedded_chunks": [],  # Return empty on error
-            }
+            chunks.extend(child_chunks)
+            chunk_index += len(child_chunks)
 
-    async def extract_main_concept_map(
-        self, state: GraphState
-    ) -> Dict[str, Any]:  # RENAMED & MODIFIED
+        return chunks
+
+    async def embed_hierarchical_chunks(self, state: GraphState) -> Dict[str, Any]:
+        """
+        Embeds hierarchical chunks using sentence transformers.
+        """
         attachments = state.get("attachments", [])
         attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Extracting Main Concept Map (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Embedding Hierarchical Text Chunks (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
-            full_text = state["original_text"]
-            if not full_text or not full_text.strip():
-                return {
-                    "raw_triples": [],
-                    "error_message": "Original text is empty for main concept map extraction.",
-                }
+            # Use hierarchical chunks for embedding
+            hierarchical_chunks = state.get("hierarchical_chunks", [])
 
-            # Adjust prompt for high-level mind map of main ideas from multiple documents
-            document_context = ""
-            if len(attachments) > 1:
-                document_context = f"\n\nNote: This analysis combines content from {len(attachments)} documents: {', '.join(attachment_names)}. Focus on finding connections and relationships between concepts across all documents."
-            elif len(attachments) == 1:
-                document_context = f"\n\nNote: This analysis is based on the document: {attachment_names[0]}."
-
-            prompt = f"""Please analyze the following document(s) and generate a high-level mind map that captures the main conceptual ideas and their relationships.
-
-MIND MAP GUIDELINES:
-1. Focus on CONCEPTUAL NODES - abstract ideas, theories, principles, main topics, key themes
-2. AVOID: References, citations, page numbers, author names, specific examples, minor details
-3. Extract 5-15 core concepts that represent the essence of the content
-4. Create meaningful relationships between concepts using clear relational terms
-5. Think like creating a mind map - start with central themes and branch out to related concepts
-
-GOOD NODES: "Machine Learning", "Neural Networks", "Data Processing", "Algorithm Optimization"
-BAD NODES: "Figure 1.2", "Smith et al. 2020", "Table 3", "Example A", "Reference [1]"
-
-GOOD RELATIONS: "implements", "is part of", "leads to", "requires", "influences", "contains", "depends on"
-BAD RELATIONS: "mentioned in", "cited by", "shown in", "referenced as"
-
-Create a mind map structure that helps users understand the core conceptual framework of the content.{document_context}
-
-Document Text:
----
-{full_text}
----
-
-Return ONLY a valid JSON object in this exact format:
-{{"triples": [{{"source": "Core Concept A", "target": "Related Concept B", "relation": "meaningful relationship"}}]}}
-
-If the document lacks sufficient conceptual content for a mind map, return:
-{{"triples": []}}
-
-Focus on capturing the conceptual landscape, not the documentary structure.
-"""
-            all_triples: List[Dict[str, str]] = []
-            try:
-                if self.use_structured_output and self.structured_llm:
-                    try:
-                        logger.debug(
-                            "Attempting main map extraction with structured output LLM."
-                        )
-                        response: ExtractedTriplesLLM = (
-                            await self.structured_llm.ainvoke(prompt)
-                        )
-                        if response.triples:
-                            for triple_obj in response.triples:
-                                all_triples.append(triple_obj.dict())
-                            logger.info(
-                                f"Extracted {len(response.triples)} main map triples (structured)."
-                            )
-                        else:
-                            logger.info(
-                                "No main map triples extracted by structured LLM."
-                            )
-                    except Exception as struct_e:
-                        logger.warning(
-                            f"Main map structured output failed: {struct_e}, trying fallback LLM call..."
-                        )
-                        llm_response_content = (await self.llm.ainvoke(prompt)).content
-                        parsed_triples = self._parse_triples_from_text(
-                            llm_response_content
-                        )
-                        all_triples.extend(parsed_triples)
-                        logger.info(
-                            f"Extracted {len(parsed_triples)} main map triples (fallback parsing)."
-                        )
-                else:
-                    logger.debug(
-                        "Attempting main map extraction with regular LLM call and manual parsing."
-                    )
-                    llm_response_content = (await self.llm.ainvoke(prompt)).content
-                    parsed_triples = self._parse_triples_from_text(llm_response_content)
-                    all_triples.extend(parsed_triples)
-                    logger.info(
-                        f"Extracted {len(parsed_triples)} main map triples (manual parsing)."
-                    )
-
-            except Exception as e:
-                logger.error(
-                    f"Error processing full text with LLM for main map: {e}",
-                    exc_info=True,
+            if hierarchical_chunks:
+                # Use hierarchical chunks for embedding
+                chunk_texts = [chunk["text"] for chunk in hierarchical_chunks]
+                embeddings_list = await asyncio.to_thread(
+                    self.embedding_model_lc.embed_documents, chunk_texts
                 )
-                # Keep existing error message if one was already set, otherwise set new one
-                return {
-                    "raw_triples": [],
-                    "error_message": state.get("error_message")
-                    or f"LLM processing error for main map: {str(e)}",
-                }
 
-            # Filter triples to keep only conceptual nodes suitable for mind mapping
-            conceptual_triples = self._filter_conceptual_triples(all_triples)
-
-            logger.info(
-                f"Extracted {len(all_triples)} raw triples, {len(conceptual_triples)} conceptual triples suitable for mind mapping"
-            )
-            logger.info(f"DEBUG: All raw triples = {all_triples}")
-            logger.info(f"DEBUG: Filtered conceptual triples = {conceptual_triples}")
-
-            return {
-                "raw_triples": conceptual_triples,
-                "error_message": state.get("error_message"),
-            }  # Preserve prior errors
-        except Exception as e:
-            logger.error(
-                f"Overall error in extract_main_concept_map node: {e}", exc_info=True
-            )
-            return {
-                "error_message": str(e),
-                "raw_triples": [],
-            }  # Set error, clear triples
-
-    async def _get_node_embeddings_for_similarity(
-        self, node_labels: List[str]
-    ) -> np.ndarray:
-        return await asyncio.to_thread(
-            self.similarity_embedding_model.encode, node_labels, convert_to_tensor=False
-        )
-
-    async def process_graph_data(self, state: GraphState) -> Dict[str, Any]:
-        # This node remains largely the same, processing the `raw_triples`
-        # which are now from the main concept map extraction.
-        attachments = state.get("attachments", [])
-        attachment_names = [att.get("filename", "Unknown") for att in attachments]
-        logger.info(
-            f"--- Node: Processing Graph Data for Main Map (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
-        )
-
-        # Ensure it uses normalize_label from app.utils.cmvs_helpers
-        try:
-            raw_triples = state.get("raw_triples", [])
-            if not raw_triples:
-                logger.info("No raw triples (from main map) to process.")
-                return {
-                    "processed_triples": [],
-                    "error_message": state.get("error_message"),
-                }
-
-            normalized_triples_intermediate = []
-            for triple in raw_triples:
-                if (
-                    not all(k in triple for k in ["source", "target", "relation"])
-                    or not triple["source"]
-                    or not triple["target"]
-                    or not triple["relation"]
+                embedded_chunks_data = []
+                for i, (hierarchical_chunk, embedding) in enumerate(
+                    zip(hierarchical_chunks, embeddings_list)
                 ):
-                    logger.warning(f"Skipping malformed triple: {triple}")
-                    continue
-                normalized_triples_intermediate.append(
-                    {
-                        "source": normalize_label(str(triple["source"])),
-                        "target": normalize_label(str(triple["target"])),
-                        "relation": str(triple["relation"]).strip(),
-                    }
-                )
-            if not normalized_triples_intermediate:  # ...
-                return {
-                    "processed_triples": [],
-                    "error_message": "No valid triples after normalization.",
-                }
+                    # Create enhanced context from parent headers for better embedding and retrieval
+                    context_text = hierarchical_chunk["text"]
+                    section_title = hierarchical_chunk.get("section_title", "")
+                    parent_headers = hierarchical_chunk.get("parent_headers", [])
 
-            nodes = set()  # ...
-            for triple in normalized_triples_intermediate:
-                nodes.add(triple["source"])
-                nodes.add(triple["target"])
-            unique_node_labels = list(nodes)
-            node_map = {label: label for label in unique_node_labels}
+                    # Build hierarchical context for better RAG retrieval
+                    if parent_headers:
+                        header_path = " → ".join([h["text"] for h in parent_headers])
+                        if section_title and section_title not in header_path:
+                            header_path += f" → {section_title}"
+                        context_text = f"[Context: {header_path}]\n\n{context_text}"
+                    elif section_title:
+                        context_text = f"[Section: {section_title}]\n\n{context_text}"
 
-            if (
-                len(unique_node_labels) > 1
-            ):  # Apply similarity-based merging for conceptual nodes
-                node_embeddings = await self._get_node_embeddings_for_similarity(
-                    unique_node_labels
-                )
-                cosine_matrix = await asyncio.to_thread(
-                    cosine_similarity, node_embeddings
-                )
-
-                # Use higher similarity threshold for conceptual nodes to avoid over-merging
-                # Conceptual nodes should be more distinct in a mind map
-                similarity_threshold = 0.90  # Higher threshold for mind mapping
-
-                logger.info(
-                    f"Applying similarity merging with threshold {similarity_threshold} for {len(unique_node_labels)} conceptual nodes"
-                )
-
-                for i in range(len(unique_node_labels)):
-                    if node_map[unique_node_labels[i]] != unique_node_labels[i]:
-                        continue
-                    for j in range(i + 1, len(unique_node_labels)):
-                        if node_map[unique_node_labels[j]] != unique_node_labels[j]:
-                            continue
-                        if cosine_matrix[i, j] > similarity_threshold:
-                            # For mind mapping, prefer keeping the shorter, more general term
-                            label_i = unique_node_labels[i]
-                            label_j = unique_node_labels[j]
-
-                            if len(label_i) <= len(label_j):
-                                keep_label, merge_label = label_i, label_j
-                            else:
-                                keep_label, merge_label = label_j, label_i
-
-                            logger.info(
-                                f"    Merging conceptual nodes: '{merge_label}' -> '{keep_label}' (similarity: {cosine_matrix[i,j]:.2f})"
-                            )
-                            node_map[merge_label] = keep_label
-
-            # Apply node mappings and create final triples
-            merged_triples_final = []
-            for triple in normalized_triples_intermediate:
-                source = triple["source"]
-                target = triple["target"]
-
-                # Apply node mappings
-                while node_map.get(source, source) != source:
-                    source = node_map[source]
-                while node_map.get(target, target) != target:
-                    target = node_map[target]
-
-                # Skip self-loops which don't make sense in mind maps
-                if source != target:
-                    merged_triples_final.append(
+                    embedded_chunks_data.append(
                         {
-                            "source": source,
-                            "target": target,
-                            "relation": triple["relation"],
+                            "text": context_text,
+                            "embedding": embedding,
+                            "source_filename": hierarchical_chunk.get(
+                                "source_filename"
+                            ),
+                            "source_s3_path": self._get_s3_path_for_filename(
+                                hierarchical_chunk.get("source_filename"), attachments
+                            ),
+                            "hierarchy_level": hierarchical_chunk.get(
+                                "hierarchy_level"
+                            ),
+                            "section_title": section_title,
+                            "parent_headers": parent_headers,
+                            "page_number": hierarchical_chunk.get("page_number"),
+                            "chunk_type": self._determine_chunk_type(
+                                hierarchical_chunk
+                            ),
                         }
                     )
 
-            # Remove duplicate triples and bidirectional duplicates for mind mapping
-            # In mind maps, we typically want undirected relationships
-            final_triples_set = set()
-            final_unique_triples = []
-
-            for triple in merged_triples_final:
-                source, target, relation = (
-                    triple["source"],
-                    triple["target"],
-                    triple["relation"],
+                logger.info(
+                    f"Successfully embedded {len(embedded_chunks_data)} hierarchical chunks"
                 )
 
-                # Create a normalized tuple for comparison (alphabetically sorted to handle bidirectionality)
-                normalized_tuple = (
-                    min(source, target),
-                    max(source, target),
-                    relation.lower().strip(),
-                )
+            else:
+                logger.info("No hierarchical chunks to embed.")
+                return {"embedded_chunks": []}
 
-                if normalized_tuple not in final_triples_set:
-                    final_unique_triples.append(triple)
-                    final_triples_set.add(normalized_tuple)
-
-            logger.info(
-                f"Mind map processing: {len(raw_triples)} raw -> {len(normalized_triples_intermediate)} normalized -> {len(final_unique_triples)} final unique conceptual relationships"
-            )
-            logger.info(f"DEBUG: Final processed triples = {final_unique_triples}")
-            return {"processed_triples": final_unique_triples, "error_message": None}
+            return {"embedded_chunks": embedded_chunks_data}
 
         except Exception as e:
-            logger.error(f"Error in process_graph_data: {e}", exc_info=True)
-            return {"error_message": str(e), "processed_triples": []}
+            logger.error(f"Error in embed_hierarchical_chunks: {e}", exc_info=True)
+            return {
+                "error_message": f"Failed to embed chunks: {str(e)}",
+                "embedded_chunks": [],
+            }
+
+    def _get_s3_path_for_filename(
+        self, filename: str, attachments: List[Dict[str, Any]]
+    ) -> Optional[str]:
+        """Get S3 path for a given filename from attachments."""
+        if not filename:
+            return None
+        for attachment in attachments:
+            if attachment.get("filename") == filename:
+                return attachment.get("s3_path")
+        return None
+
+    def _determine_chunk_type(self, hierarchical_chunk: Dict[str, Any]) -> str:
+        """Determine the type of chunk based on hierarchy level and content."""
+        hierarchy_level = hierarchical_chunk.get("hierarchy_level", 4)
+        text = hierarchical_chunk.get("text", "").lower()
+
+        if hierarchy_level <= 1:
+            return "title"
+        elif hierarchy_level == 2:
+            return "chapter"
+        elif hierarchy_level == 3:
+            return "section"
+        elif "conclusion" in text or "summary" in text:
+            return "conclusion"
+        elif "introduction" in text or "overview" in text:
+            return "introduction"
+        else:
+            return "body"
+
+    def _determine_chunk_source(
+        self, chunk_text: str, attachments: List[Dict[str, Any]]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Determine source filename and S3 path for a chunk (fallback method)."""
+        # Look for document separator patterns in the chunk
+        for attachment in attachments:
+            filename = attachment.get("filename", "")
+            if f"--- Document: {filename} ---" in chunk_text:
+                return filename, attachment.get("s3_path")
+
+        # If we can't determine from separator, try to match against original text segments
+        if attachments:
+            chunk_clean = chunk_text.replace(f"--- Document:", "").strip()
+            max_overlap = 0
+            best_match = None
+
+            for attachment in attachments:
+                attachment_text = attachment.get("extracted_text", "")
+                if attachment_text and chunk_clean in attachment_text:
+                    overlap = len(chunk_clean)
+                    if overlap > max_overlap:
+                        max_overlap = overlap
+                        best_match = attachment
+
+            if best_match:
+                return best_match.get("filename"), best_match.get("s3_path")
+
+        return None, None
 
     async def generate_react_flow(self, state: GraphState) -> Dict[str, Any]:
         attachments = state.get("attachments", [])
         attachment_names = [att.get("filename", "Unknown") for att in attachments]
         logger.info(
-            f"--- Node: Generating React Flow Data for Main Map (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
+            f"--- Node: Generating React Flow Data from Document Structure (Attachments: {', '.join(attachment_names)}, User: {state.get('user_id', 'N/A')}) ---"
         )
         try:
-            processed_triples = state.get("processed_triples", [])
-            logger.info(f"DEBUG: processed_triples = {processed_triples}")
-            logger.info(
-                f"DEBUG: Number of processed_triples = {len(processed_triples)}"
-            )
+            # Extract hierarchy titles directly from hierarchical chunks
+            hierarchical_chunks = state.get("hierarchical_chunks", [])
 
-            if not processed_triples:  # ... (handle no triples) ...
-                logger.warning("No processed triples found for React Flow generation")
-                react_flow_data = await asyncio.to_thread(generate_react_flow_data, [])
-                logger.info(f"DEBUG: Empty react_flow_data = {react_flow_data}")
+            logger.info(f"Found {len(hierarchical_chunks)} hierarchical chunks")
+
+            if not hierarchical_chunks:
+                logger.warning(
+                    "No hierarchical chunks found, generating minimal structure"
+                )
                 return {
-                    "react_flow_data": react_flow_data,
-                    "error_message": state.get("error_message")
-                    or "No processed triples for React Flow.",
+                    "react_flow_data": self._create_fallback_react_flow(),
+                    "processed_triples": [],
+                    "hierarchical_concepts": {},
+                    "error_message": "No hierarchical structure found in document.",
                 }
 
-            logger.info(
-                f"Generating React Flow data from {len(processed_triples)} processed triples"
+            # Extract titles directly from hierarchical structure
+            hierarchy_titles = self._extract_hierarchy_titles(
+                hierarchical_chunks, attachments
             )
-            react_flow_data = await asyncio.to_thread(
-                generate_react_flow_data, processed_triples
-            )
-            logger.info(f"DEBUG: Generated react_flow_data = {react_flow_data}")
-            logger.info(
-                f"DEBUG: react_flow_data keys = {react_flow_data.keys() if react_flow_data else 'None'}"
-            )
-            if react_flow_data and "edges" in react_flow_data:
-                logger.info(
-                    f"DEBUG: Number of edges generated = {len(react_flow_data['edges'])}"
-                )
-                logger.info(
-                    f"DEBUG: First few edges = {react_flow_data['edges'][:3] if react_flow_data['edges'] else 'No edges'}"
-                )
 
-            return {"react_flow_data": react_flow_data, "error_message": None}
+            logger.info(
+                f"Extracted {len(hierarchy_titles)} hierarchy titles for LLM processing"
+            )
+
+            # Generate React Flow data directly via LLM
+            react_flow_data = await self._generate_react_flow_with_llm(hierarchy_titles)
+
+            logger.info(
+                f"Generated react_flow_data with {len(react_flow_data.get('nodes', []))} nodes and {len(react_flow_data.get('edges', []))} edges"
+            )
+
+            return {
+                "react_flow_data": react_flow_data,
+                "processed_triples": [],  # No longer needed with direct LLM approach
+                "hierarchical_concepts": {"titles": hierarchy_titles},
+                "error_message": None,
+            }
+
         except Exception as e:
             logger.error(f"Error in generate_react_flow: {e}", exc_info=True)
             return {
-                "react_flow_data": generate_react_flow_data([]),
+                "react_flow_data": self._create_fallback_react_flow(),
+                "processed_triples": [],
+                "hierarchical_concepts": {},
                 "error_message": str(e),
             }
 
@@ -660,6 +479,15 @@ Focus on capturing the conceptual landscape, not the documentary structure.
                                 "embedding": emb_chunk["embedding"],
                                 "source_filename": emb_chunk.get("source_filename"),
                                 "source_s3_path": emb_chunk.get("source_s3_path"),
+                                "hierarchy_level": emb_chunk.get(
+                                    "hierarchy_level"
+                                ),  # Store hierarchy level
+                                "page_number": emb_chunk.get(
+                                    "page_number"
+                                ),  # Store page number
+                                "chunk_type": emb_chunk.get(
+                                    "chunk_type"
+                                ),  # Store chunk type
                                 "created_at": datetime.datetime.now(UTC),
                             }
                         )
@@ -687,222 +515,486 @@ Focus on capturing the conceptual landscape, not the documentary structure.
                 "error_message": str(e),
             }
 
-    def _is_conceptual_node(self, node_text: str) -> bool:
+    def _extract_hierarchy_titles(
+        self,
+        hierarchical_chunks: List[Dict[str, Any]],
+        attachments: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
         """
-        Determines if a node represents a conceptual idea suitable for mind mapping.
-        Filters out references, citations, examples, and non-conceptual content.
+        Extract hierarchy titles directly from structured_content in attachments.
+        Returns only the titles without full text content for efficient LLM processing.
         """
-        if not node_text or not node_text.strip():
-            return False
+        # Get document title from attachments
+        document_title = "Document"
+        if attachments:
+            document_title = ", ".join(
+                [att.get("filename", "Unknown") for att in attachments]
+            )
+            if len(document_title) > 100:
+                document_title = document_title[:97] + "..."
 
-        node_text = node_text.strip().lower()
+        # Extract hierarchy directly from structured_content (preserve original nesting)
+        nested_hierarchy = []
+        total_titles = 0
 
-        # Filter out common non-conceptual patterns
-        non_conceptual_patterns = [
-            r"^figure\s+\d+",  # Figure 1, Figure 2.1, etc.
-            r"^table\s+\d+",  # Table 1, Table 2.1, etc.
-            r"^section\s+\d+",  # Section 1, Section 2.1, etc.
-            r"^chapter\s+\d+",  # Chapter 1, Chapter 2, etc.
-            r"^page\s+\d+",  # Page 1, Page 123, etc.
-            r"^reference\s*\[?\d+\]?",  # Reference 1, Reference [1], etc.
-            r"^\[?\d+\]?$",  # [1], 2, [123], etc.
-            r"^example\s*\d*$",  # Example, Example 1, etc.
-            r"^appendix\s+[a-z]?",  # Appendix, Appendix A, etc.
-            r"et\s+al\.?$",  # Smith et al., Jones et al
-            r"^\d{4}$",  # Years like 2023, 2024
-            r"^vol\.?\s*\d+",  # Vol. 1, Volume 2, etc.
-            r"^pp?\.?\s*\d+",  # p. 123, pp. 45-67, etc.
-            r"^isbn",  # ISBN numbers
-            r"^doi:",  # DOI references
-            r"http[s]?://",  # URLs
-            r"^www\.",  # Web addresses
-        ]
-
-        # Check against patterns
-        for pattern in non_conceptual_patterns:
-            if re.search(pattern, node_text):
-                return False
-
-        # Filter out very short non-descriptive words
-        if len(node_text) < 3:
-            return False
-
-        # Filter out common non-conceptual words
-        non_conceptual_words = {
-            "the",
-            "and",
-            "or",
-            "but",
-            "in",
-            "on",
-            "at",
-            "to",
-            "for",
-            "of",
-            "with",
-            "by",
-            "from",
-            "as",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "been",
-            "being",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "will",
-            "would",
-            "could",
-            "should",
-            "may",
-            "might",
-            "can",
-            "this",
-            "that",
-            "these",
-            "those",
-            "here",
-            "there",
-            "where",
-            "when",
-            "why",
-            "how",
-            "what",
-            "which",
-            "who",
-            "above",
-            "below",
-            "before",
-            "after",
-            "during",
-            "through",
-            "between",
-            "among",
-            "within",
-            "without",
-            "across",
-            "around",
-            "toward",
-            "towards",
-            "under",
-            "over",
-            "above",
-            "below",
-            "beside",
-            "near",
-            "far",
-            "close",
-            "same",
-            "different",
-            "similar",
-            "unlike",
-            "like",
-            "such",
-            "also",
-            "too",
-            "very",
-            "much",
-            "many",
-            "most",
-            "more",
-            "less",
-            "few",
-            "little",
-            "some",
-            "any",
-            "all",
-            "each",
-            "every",
-            "both",
-            "either",
-            "neither",
-            "first",
-            "second",
-            "third",
-            "last",
-            "next",
-            "previous",
-            "other",
-            "another",
-        }
-
-        if node_text in non_conceptual_words:
-            return False
-
-        # Must contain at least one alphabetic character
-        if not re.search(r"[a-zA-Z]", node_text):
-            return False
-
-        # Prefer longer, more descriptive terms for concepts
-        # But allow some shorter conceptual terms
-        meaningful_short_terms = {
-            "ai",
-            "ml",
-            "api",
-            "cpu",
-            "gpu",
-            "ram",
-            "sql",
-            "xml",
-            "json",
-            "html",
-            "css",
-            "php",
-            "ios",
-            "ui",
-            "ux",
-            "seo",
-            "crm",
-            "erp",
-            "roi",
-            "kpi",
-            "sdg",
-            "gdp",
-            "nasa",
-            "who",
-            "faq",
-            "ceo",
-            "cto",
-            "hr",
-            "it",
-            "pr",
-        }
-
-        if len(node_text) < 4 and node_text not in meaningful_short_terms:
-            return False
-
-        return True
-
-    def _filter_conceptual_triples(
-        self, triples: List[Dict[str, str]]
-    ) -> List[Dict[str, str]]:
-        """
-        Filters triples to keep only those with conceptual nodes suitable for mind mapping.
-        """
-        conceptual_triples = []
-
-        for triple in triples:
-            source = triple.get("source", "").strip()
-            target = triple.get("target", "").strip()
-            relation = triple.get("relation", "").strip()
-
-            # Both source and target must be conceptual
-            if (
-                self._is_conceptual_node(source)
-                and self._is_conceptual_node(target)
-                and source.lower() != target.lower()  # Avoid self-loops
-                and relation  # Must have a relation
-            ):
-                conceptual_triples.append(triple)
-            else:
-                logger.debug(
-                    f"Filtered out non-conceptual triple: {source} -> {target}"
+        for attachment in attachments:
+            structured_content = attachment.get("structured_content")
+            if structured_content:
+                logger.info(
+                    f"Extracting hierarchy from structured_content for {attachment.get('filename', 'Unknown')}"
                 )
 
-        return conceptual_triples
+                # Extract hierarchy while preserving nesting structure
+                extracted_hierarchy = self._extract_nested_titles_from_content(
+                    structured_content
+                )
+                if extracted_hierarchy:
+                    nested_hierarchy.append(extracted_hierarchy)
+                    total_titles += self._count_titles_recursive([extracted_hierarchy])
+
+        if not nested_hierarchy:
+            logger.warning(
+                "No structured_content found in attachments, hierarchy will be empty"
+            )
+
+        logger.info(f"Extracted complete hierarchy with {total_titles} total titles")
+
+        return {
+            "document_title": document_title,
+            "hierarchy": nested_hierarchy,
+            "total_titles": total_titles,
+        }
+
+    def _extract_nested_titles_from_content(
+        self, structured_content: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Extract titles directly from structured content while preserving the nested hierarchy.
+        This maintains the original structure as created during PDF parsing.
+        """
+
+        def extract_recursive(node: Dict[str, Any], level: int = 0) -> Dict[str, Any]:
+            title = node.get("title", "").strip()
+            if not title:
+                return None
+
+            extracted = {"title": title, "level": level, "children": []}
+
+            # Process children recursively to maintain hierarchy
+            for child in node.get("children", []):
+                child_data = extract_recursive(child, level + 1)
+                if child_data:
+                    extracted["children"].append(child_data)
+
+            return extracted
+
+        return extract_recursive(structured_content)
+
+    def _extract_titles_from_structured_content(
+        self, structured_content: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Extract titles directly from structured content recursively (flattened)"""
+        titles = []
+
+        def extract_recursive(node: Dict[str, Any], level: int = 0) -> None:
+            title = node.get("title", "").strip()
+            if title:
+                titles.append(
+                    {
+                        "title": title,
+                        "level": level,
+                        "parent_headers": [],  # Will be filled in _build_nested_hierarchy
+                    }
+                )
+
+            # Process children
+            for child in node.get("children", []):
+                extract_recursive(child, level + 1)
+
+        extract_recursive(structured_content)
+        return titles
+
+    def _build_nested_hierarchy(
+        self, flat_titles: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Build nested hierarchy structure from flat list of titles"""
+        if not flat_titles:
+            return []
+
+        # Sort by level to process from top to bottom
+        sorted_titles = sorted(flat_titles, key=lambda x: x.get("level", 0))
+
+        # Build nested structure
+        nested = []
+        stack = []  # Stack to track parent hierarchy
+
+        for title_info in sorted_titles:
+            title = title_info["title"]
+            level = title_info.get("level", 0)
+
+            # Create title node
+            title_node = {"title": title, "level": level, "children": []}
+
+            # Adjust stack based on current level
+            while stack and stack[-1]["level"] >= level:
+                stack.pop()
+
+            # Add to parent or root
+            if stack:
+                stack[-1]["children"].append(title_node)
+            else:
+                nested.append(title_node)
+
+            # Add current node to stack
+            stack.append(title_node)
+
+        return nested
+
+    def _count_titles_recursive(self, hierarchy: List[Dict[str, Any]]) -> int:
+        """Count total number of titles in hierarchy recursively"""
+        count = 0
+        for node in hierarchy:
+            count += 1  # Current node
+            count += self._count_titles_recursive(node.get("children", []))
+        return count
+
+    async def _generate_react_flow_with_llm(
+        self, hierarchy_titles: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Generate React Flow data from hierarchy titles with proper positioning.
+        Uses deterministic positioning algorithm for ordered layout.
+        """
+        document_title = hierarchy_titles.get("document_title", "Document")
+        hierarchy = hierarchy_titles.get("hierarchy", [])
+        total_titles = hierarchy_titles.get("total_titles", 0)
+
+        logger.info(
+            f"Generating React Flow with {total_titles} titles from {len(hierarchy)} top-level nodes"
+        )
+
+        if not hierarchy:
+            logger.warning("No hierarchy titles found, creating fallback")
+            return self._create_fallback_react_flow()
+
+        # Generate React Flow data with proper hierarchical positioning
+        return self._create_hierarchical_react_flow(document_title, hierarchy)
+
+    def _create_fallback_react_flow(self) -> Dict[str, Any]:
+        """Create a simple fallback React Flow structure when hierarchy processing fails"""
+        return {
+            "nodes": [
+                {
+                    "id": "fallback-document",
+                    "type": "default",
+                    "data": {
+                        "label": "Document Structure",
+                        "level": 0,
+                        "nodeType": "document",
+                    },
+                    "position": {"x": 50, "y": 50},
+                    "style": self._get_node_style(0),
+                },
+                {
+                    "id": "fallback-content",
+                    "type": "default",
+                    "data": {"label": "Content", "level": 1, "nodeType": "content"},
+                    "position": {"x": 350, "y": 130},
+                    "style": self._get_node_style(1),
+                },
+            ],
+            "edges": [
+                {
+                    "id": "edge-fallback-document-content",
+                    "source": "fallback-document",
+                    "target": "fallback-content",
+                    "type": "default",
+                    "style": {"stroke": "#b1b1b7", "strokeWidth": 2},
+                }
+            ],
+        }
+
+    def _create_hierarchical_react_flow(
+        self, document_title: str, hierarchy: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Create React Flow data with proper horizontal hierarchical positioning.
+        Uses tree-like layout with horizontal separation of siblings.
+        """
+        nodes = []
+        edges = []
+
+        # Layout configuration
+        LEVEL_HEIGHT = 150  # Vertical spacing between hierarchy levels
+        NODE_WIDTH = 250  # Horizontal spacing between sibling nodes
+        START_X = 50  # Starting X position
+        START_Y = 50  # Starting Y position
+
+        # Create node ID mapping
+        node_id_map = {}
+        node_counter = 0
+
+        def create_clean_node_id(title: str) -> str:
+            nonlocal node_counter
+            node_counter += 1
+            # Create clean ID from title
+            clean_title = re.sub(r"[^a-zA-Z0-9\s]", "", title)
+            clean_title = re.sub(r"\s+", "-", clean_title.strip()).lower()
+            if len(clean_title) > 30:
+                clean_title = clean_title[:30]
+            return f"{clean_title}-{node_counter}"
+
+        def calculate_subtree_width(node: Dict[str, Any]) -> int:
+            """Calculate the total width needed for a subtree"""
+            children = node.get("children", [])
+            if not children:
+                return 1  # Single node width
+
+            # Sum up all children widths
+            total_width = sum(calculate_subtree_width(child) for child in children)
+            return max(1, total_width)  # At least 1 for the parent node
+
+        def position_nodes_horizontally(
+            nodes_list: List[Dict[str, Any]],
+            level: int = 0,
+            start_x: int = START_X,
+            parent_id: str = None,
+        ) -> int:
+            """
+            Position nodes horizontally at the same level.
+            Returns the next available X position.
+            """
+            current_x = start_x
+            level_y = START_Y + level * LEVEL_HEIGHT
+
+            for node in nodes_list:
+                title = node.get("title", "").strip()
+                if not title:
+                    continue
+
+                # Create or get node ID
+                if title not in node_id_map:
+                    node_id_map[title] = create_clean_node_id(title)
+                node_id = node_id_map[title]
+
+                # Calculate subtree width to center parent over children
+                subtree_width = calculate_subtree_width(node)
+                children = node.get("children", [])
+
+                # If node has children, center it over them
+                if children:
+                    # Calculate total width needed for children
+                    children_total_width = sum(
+                        calculate_subtree_width(child) for child in children
+                    )
+                    children_pixel_width = children_total_width * NODE_WIDTH
+
+                    # Center parent over children
+                    node_x = current_x + (children_pixel_width - NODE_WIDTH) // 2
+                    # Ensure minimum spacing
+                    node_x = max(node_x, current_x)
+                else:
+                    node_x = current_x
+
+                # Create React Flow node
+                react_node = {
+                    "id": node_id,
+                    "type": "default",
+                    "data": {
+                        "label": title,
+                        "level": level,
+                        "nodeType": self._determine_node_type(title, level),
+                    },
+                    "position": {"x": node_x, "y": level_y},
+                    "style": self._get_node_style(level),
+                }
+
+                nodes.append(react_node)
+
+                # Create edge to parent
+                if parent_id:
+                    edge_id = f"edge-{parent_id}-{node_id}"
+                    edge = {
+                        "id": edge_id,
+                        "source": parent_id,
+                        "target": node_id,
+                        "type": "default",
+                        "style": {"stroke": "#b1b1b7", "strokeWidth": 2},
+                        "animated": False,
+                    }
+                    edges.append(edge)
+
+                # Process children recursively
+                if children:
+                    children_start_x = current_x
+                    position_nodes_horizontally(
+                        children, level + 1, children_start_x, node_id
+                    )
+
+                # Move to next position for siblings
+                current_x += subtree_width * NODE_WIDTH
+
+            return current_x
+
+        # Add document root node if multiple top-level sections
+        root_node_id = None
+        start_level = 0
+
+        if len(hierarchy) > 1:
+            root_node_id = create_clean_node_id(document_title)
+
+            # Calculate total width for all top-level sections
+            total_top_level_width = sum(
+                calculate_subtree_width(node) for node in hierarchy
+            )
+            root_x = START_X + (total_top_level_width * NODE_WIDTH - NODE_WIDTH) // 2
+
+            root_node = {
+                "id": root_node_id,
+                "type": "default",
+                "data": {"label": document_title, "level": 0, "nodeType": "document"},
+                "position": {"x": root_x, "y": START_Y},
+                "style": self._get_node_style(0),
+            }
+            nodes.append(root_node)
+            start_level = 1
+
+        # Position all hierarchy nodes
+        position_nodes_horizontally(hierarchy, start_level, START_X, root_node_id)
+
+        # Connect top-level nodes to root if root exists
+        if root_node_id:
+            for node in hierarchy:
+                title = node.get("title", "").strip()
+                if title and title in node_id_map:
+                    child_id = node_id_map[title]
+                    edge_id = f"edge-{root_node_id}-{child_id}"
+                    edge = {
+                        "id": edge_id,
+                        "source": root_node_id,
+                        "target": child_id,
+                        "type": "default",
+                        "style": {"stroke": "#b1b1b7", "strokeWidth": 2},
+                        "animated": False,
+                    }
+                    edges.append(edge)
+
+        logger.info(
+            f"Created horizontal React Flow with {len(nodes)} nodes and {len(edges)} edges"
+        )
+
+        # Log positioning verification
+        if nodes:
+            # Group nodes by level to show horizontal distribution
+            nodes_by_level = {}
+            for node in nodes:
+                level = node["data"]["level"]
+                if level not in nodes_by_level:
+                    nodes_by_level[level] = []
+                nodes_by_level[level].append(node)
+
+            logger.info("Horizontal layout by level:")
+            for level in sorted(nodes_by_level.keys()):
+                level_nodes = sorted(
+                    nodes_by_level[level], key=lambda n: n["position"]["x"]
+                )
+                x_positions = [n["position"]["x"] for n in level_nodes]
+                labels = [
+                    (
+                        n["data"]["label"][:30] + "..."
+                        if len(n["data"]["label"]) > 30
+                        else n["data"]["label"]
+                    )
+                    for n in level_nodes
+                ]
+                logger.info(
+                    f"  Level {level}: {len(level_nodes)} nodes at X positions {x_positions}"
+                )
+                logger.info(f"    Labels: {labels}")
+
+        return {"nodes": nodes, "edges": edges}
+
+    def _determine_node_type(self, title: str, level: int) -> str:
+        """Determine node type based on title content and hierarchy level"""
+        title_lower = title.lower()
+
+        if level == 0:
+            return "document"
+        elif level == 1:
+            return "chapter"
+        elif level == 2:
+            return "section"
+        elif "introduction" in title_lower or "overview" in title_lower:
+            return "introduction"
+        elif "conclusion" in title_lower or "summary" in title_lower:
+            return "conclusion"
+        elif "methodology" in title_lower or "method" in title_lower:
+            return "methodology"
+        elif "result" in title_lower or "finding" in title_lower:
+            return "results"
+        elif "reference" in title_lower or "bibliography" in title_lower:
+            return "references"
+        else:
+            return "content"
+
+    def _get_node_style(self, level: int) -> Dict[str, Any]:
+        """Get styling for nodes based on hierarchy level"""
+        base_style = {
+            "border": "2px solid",
+            "borderRadius": "8px",
+            "padding": "10px",
+            "fontSize": "14px",
+            "fontWeight": "500",
+        }
+
+        # Color scheme based on level
+        if level == 0:
+            # Document root - dark blue
+            base_style.update(
+                {
+                    "backgroundColor": "#1e40af",
+                    "borderColor": "#1e3a8a",
+                    "color": "white",
+                    "fontSize": "16px",
+                    "fontWeight": "600",
+                }
+            )
+        elif level == 1:
+            # Top level - blue
+            base_style.update(
+                {
+                    "backgroundColor": "#3b82f6",
+                    "borderColor": "#2563eb",
+                    "color": "white",
+                    "fontSize": "15px",
+                }
+            )
+        elif level == 2:
+            # Second level - light blue
+            base_style.update(
+                {
+                    "backgroundColor": "#60a5fa",
+                    "borderColor": "#3b82f6",
+                    "color": "white",
+                }
+            )
+        elif level == 3:
+            # Third level - lighter blue
+            base_style.update(
+                {
+                    "backgroundColor": "#93c5fd",
+                    "borderColor": "#60a5fa",
+                    "color": "#1e40af",
+                }
+            )
+        else:
+            # Deeper levels - very light blue
+            base_style.update(
+                {
+                    "backgroundColor": "#dbeafe",
+                    "borderColor": "#93c5fd",
+                    "color": "#1e40af",
+                }
+            )
+
+        return base_style

@@ -43,7 +43,7 @@ class CMVSResponse(BaseModel):
 
 # --- Multiple CMVS Response Model ---
 class MultipleCMVSResponse(BaseModel):
-    results: List[CMVSResponse]  # Keep for backward compatibility
+    results: List[CMVSResponse]
     overall_errors: Optional[List[str]] = None  # For errors not tied to a specific file
 
 

@@ -22,20 +22,14 @@ def build_graph_instance() -> StateGraph:
 
     # Define the nodes in the graph
     workflow.add_node("chunk_text", cmvs_nodes_instance.chunk_text)
-    workflow.add_node("embed_chunks", cmvs_nodes_instance.embed_text_chunks)
-    workflow.add_node("extract_main_map", cmvs_nodes_instance.extract_main_concept_map)
-    workflow.add_node("process_main_map_graph", cmvs_nodes_instance.process_graph_data)
-    workflow.add_node(
-        "generate_main_map_react_flow", cmvs_nodes_instance.generate_react_flow
-    )
+    workflow.add_node("embed_chunks", cmvs_nodes_instance.embed_hierarchical_chunks)
+    workflow.add_node("generate_react_flow", cmvs_nodes_instance.generate_react_flow)
     workflow.add_node("store_db", cmvs_nodes_instance.store_cmvs_data_in_mongodb)
 
     workflow.set_entry_point("chunk_text")
     workflow.add_edge("chunk_text", "embed_chunks")
-    workflow.add_edge("embed_chunks", "extract_main_map")
-    workflow.add_edge("extract_main_map", "process_main_map_graph")
-    workflow.add_edge("process_main_map_graph", "generate_main_map_react_flow")
-    workflow.add_edge("generate_main_map_react_flow", "store_db")
+    workflow.add_edge("embed_chunks", "generate_react_flow")
+    workflow.add_edge("generate_react_flow", "store_db")
     workflow.add_edge("store_db", END)
 
     # Compile the graph
