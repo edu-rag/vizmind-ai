@@ -19,8 +19,7 @@ This project provides a powerful FastAPI backend to automatically transform PDF 
     * Ask questions about concepts within a generated map.
     * Retrieves relevant context from stored document chunks using MongoDB Atlas Vector Search.
     * Intelligent grading of retrieved context by an LLM.
-    * Conditional fallback to web search (Tavily API, focused on verified sites like Wikipedia and scientific journals) if initial context is insufficient.
-    * LLM-generated answers with cited sources (from both database chunks and web results).
+    * LLM-generated answers with cited sources.
 * **LangGraph Orchestration**: Complex workflows for CMVS generation and RAG Q&A are managed using LangGraph.
 * **Secure Authentication**:
     * Google Sign-In for user authentication.
@@ -45,7 +44,6 @@ The application is built around a FastAPI backend with several key components:
     * **Google OAuth**: For user sign-in.
     * **Groq API**: For fast LLM inference.
     * **HuggingFace Embedding Models**: For generating text embeddings.
-    * **Tavily API**: For targeted web searches as a fallback.
 
 ## Application Flow Diagrams (Mermaid)
 
@@ -278,7 +276,6 @@ This **flowchart** describes the Retrieval Augmented Generation (RAG) pipeline u
     * **Conditional Branching (Decision Point)**:
         * If the LLM grades the database documents as **Sufficient & Confident**: The graph proceeds directly to generate an answer using only these internal documents (`R_GenDB`).
         * If the LLM grades them as **Insufficient or with Low Confidence**: The graph routes to the `perform_web_search` node.
-    * `perform_web_search` (Fallback): If triggered, this node uses an external search tool like **Tavily API** (or your integrated PaperScraper) to find relevant information from the web, focusing on configured "verified sites" (like Wikipedia or scientific journals).
     * `generate_final_answer`: This node is reached either directly after sufficient DB retrieval or after web search. It uses an **LLM (Groq)** to synthesize a final answer.
         * If only DB documents were used (`R_GenDB` path), the LLM uses that context.
         * If web search was performed (`R_GenWeb` path), the LLM uses a combination of the initial (possibly few) DB documents *and* the new web documents as context.
@@ -306,7 +303,6 @@ This **flowchart** describes the Retrieval Augmented Generation (RAG) pipeline u
     * A Client ID from Google Cloud Console for your application (this will be your `GOOGLE_CLIENT_ID`). Ensure it's configured for web applications and has the necessary redirect URIs if you're building a frontend. For backend token verification, the Client ID is used as the audience.
 * **API Keys**:
     * **Groq API Key**: For accessing LLMs via Groq.
-    * **Tavily API Key**: For the web search fallback in the RAG pipeline.
 
 ### Installation Steps
 
@@ -384,9 +380,6 @@ This **flowchart** describes the Retrieval Augmented Generation (RAG) pipeline u
 
     # Google OAuth
     GOOGLE_CLIENT_ID="your_google_oauth_client_id.apps.googleusercontent.com" # Audience for ID token verification
-
-    # Tavily API (for RAG Web Search)
-    TAVILY_API_KEY="your_tavily_api_key"
 
     # RAG Web Search Domain Filtering (Comma-separated list for .env, or define in config.py)
     # Example for .env if your Pydantic settings can parse it, otherwise define in config.py's list directly.
@@ -496,7 +489,6 @@ All endpoints are prefixed with `/api/v1`. Authentication (JWT Bearer token) is 
 * **Database**: MongoDB Atlas (with Vector Search)
 * **Object Storage**: S3-compatible storage (e.g., AWS S3, MinIO)
 * **Authentication**: Google OAuth 2.0, JWT (python-jose)
-* **Web Search (RAG Fallback)**: Tavily API
 * **PDF Processing**: PyMuPDF (fitz)
 * **Data Validation**: Pydantic
 * **Async**: `asyncio`
