@@ -11,8 +11,7 @@ import {
   Download,
   MoreHorizontal,
   AlertCircle,
-  Home,
-  MessageCircle
+  Home
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -23,7 +22,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ConceptMapDisplay } from '@/components/ConceptMapDisplay';
 import { NodeDetailPanel } from '@/components/NodeDetailPanel';
-import { ChatSidebar } from '@/components/ChatSidebar';
 import { useAppStore } from '@/lib/store';
 import { getConceptMap } from '@/lib/api';
 import { toast } from 'sonner';
@@ -41,9 +39,7 @@ export default function MapPage() {
     isAuthenticated,
     jwt,
     setSelectedNode,
-    setDetailPanelOpen,
-    isChatSidebarOpen,
-    setChatSidebarOpen
+    setDetailPanelOpen
   } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -248,16 +244,6 @@ export default function MapPage() {
                   <Download className="mr-2 h-4 w-4" />
                   Export
                 </Button>
-
-                <Button
-                  variant={isChatSidebarOpen ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setChatSidebarOpen(!isChatSidebarOpen)}
-                  className="touch-target"
-                >
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  Chat
-                </Button>
               </>
             )}
 
@@ -283,10 +269,6 @@ export default function MapPage() {
                       <Download className="mr-2 h-4 w-4" />
                       Export Map
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setChatSidebarOpen(!isChatSidebarOpen)}>
-                      <MessageCircle className="mr-2 h-4 w-4" />
-                      {isChatSidebarOpen ? 'Close Chat' : 'Open Chat'}
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
                 )}
@@ -303,13 +285,10 @@ export default function MapPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden flex">
+      <main className="flex-1 overflow-hidden">
         <div className="flex-1 max-w-7xl mx-auto p-4">
           <ConceptMapDisplay />
         </div>
-
-        {/* Chat Sidebar */}
-        <ChatSidebar />
       </main>
 
       {/* Node Detail Panel */}

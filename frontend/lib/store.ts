@@ -58,7 +58,6 @@ interface AppState {
   selectedNode: string | null;
   isDetailPanelOpen: boolean;
   isSidebarCollapsed: boolean;
-  isChatSidebarOpen: boolean;
   isLoading: boolean;
   uploadProgress: number;
 
@@ -71,7 +70,6 @@ interface AppState {
   setSelectedNode: (nodeId: string | null) => void;
   setDetailPanelOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
-  setChatSidebarOpen: (open: boolean) => void;
   setLoading: (loading: boolean) => void;
   setUploadProgress: (progress: number) => void;
   logout: () => void;
@@ -89,7 +87,6 @@ export const useAppStore = create<AppState>()(
       selectedNode: null,
       isDetailPanelOpen: false,
       isSidebarCollapsed: false,
-      isChatSidebarOpen: false,
       isLoading: false,
       uploadProgress: 0,
 
@@ -102,7 +99,6 @@ export const useAppStore = create<AppState>()(
       setSelectedNode: (nodeId) => set({ selectedNode: nodeId }),
       setDetailPanelOpen: (open) => set({ isDetailPanelOpen: open }),
       setSidebarCollapsed: (collapsed) => set({ isSidebarCollapsed: collapsed }),
-      setChatSidebarOpen: (open) => set({ isChatSidebarOpen: open }),
       setLoading: (loading) => set({ isLoading: loading }),
       setUploadProgress: (progress) => set({ uploadProgress: progress }),
       logout: () => set({
@@ -111,8 +107,7 @@ export const useAppStore = create<AppState>()(
         isAuthenticated: false,
         currentMap: null,
         selectedNode: null,
-        isDetailPanelOpen: false,
-        isChatSidebarOpen: false
+        isDetailPanelOpen: false
       }),
     }),
     {

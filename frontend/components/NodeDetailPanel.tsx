@@ -33,10 +33,21 @@ export function NodeDetailPanel() {
     content: string;
     citedSources?: any[];
     timestamp: Date;
+    nodeId: string; // Track which node this message is for
   }>>([]);
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [sessionHistory, setSessionHistory] = useState<{
+    [nodeId: string]: Array<{
+      id: string;
+      type: 'question' | 'answer';
+      content: string;
+      citedSources?: any[];
+      timestamp: Date;
+      nodeId: string;
+    }>
+  }>({});
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const questionInputRef = useRef<HTMLInputElement>(null);
   const isLoadingRef = useRef(false);
@@ -87,8 +98,15 @@ export function NodeDetailPanel() {
     if (selectedNode && selectedNodeData && currentMap && jwt) {
       // Auto-fetch node details using the /details endpoint
       handleGetNodeDetails();
+
+      // Load conversation history for this node
+      if (sessionHistory[selectedNode]) {
+        setConversation(sessionHistory[selectedNode]);
+      } else {
+        setConversation([]);
+      }
     }
-  }, [selectedNode, handleGetNodeDetails]);
+  }, [selectedNode, handleGetNodeDetails, sessionHistory]);
 
   // Separate effect for focusing input when panel opens
   useEffect(() => {
@@ -123,16 +141,20 @@ export function NodeDetailPanel() {
   }, [isDetailPanelOpen]);
 
   const handleAskQuestion = useCallback(async (questionText: string) => {
-    if (!currentMap || !jwt || !selectedNodeData) return;
+    if (!currentMap || !jwt || !selectedNodeData || !selectedNode) return;
 
     // Add the question to conversation immediately
     const questionId = Date.now().toString();
-    setConversation(prev => [...prev, {
+    const questionMessage = {
       id: questionId,
-      type: 'question',
+      type: 'question' as const,
       content: questionText,
-      timestamp: new Date()
-    }]);
+      timestamp: new Date(),
+      nodeId: selectedNode
+    };
+
+    const newConversation = [...conversation, questionMessage];
+    setConversation(newConversation);
 
     setIsAsking(true);
 
@@ -148,13 +170,24 @@ export function NodeDetailPanel() {
         // Add the answer to conversation
         const answerId = (Date.now() + 1).toString();
         const responseData = result.data;
-        setConversation(prev => [...prev, {
+        const answerMessage = {
           id: answerId,
-          type: 'answer',
+          type: 'answer' as const,
           content: responseData.answer,
           citedSources: responseData.cited_sources || [],
-          timestamp: new Date()
-        }]);
+          timestamp: new Date(),
+          nodeId: selectedNode
+        };
+
+        const updatedConversation = [...newConversation, answerMessage];
+        setConversation(updatedConversation);
+
+        // Save to session history
+        setSessionHistory(prev => ({
+          ...prev,
+          [selectedNode]: updatedConversation
+        }));
+
         toast.success('Question answered successfully');
       } else {
         toast.error('Failed to get an answer');
@@ -165,7 +198,7 @@ export function NodeDetailPanel() {
     } finally {
       setIsAsking(false);
     }
-  }, [currentMap, jwt, selectedNodeData]);
+  }, [currentMap, jwt, selectedNodeData, selectedNode, conversation]);
 
   const handleSubmitQuestion = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,6 +209,14 @@ export function NodeDetailPanel() {
   }, [question, handleAskQuestion]);
 
   const handleClose = useCallback(() => {
+    // Save current conversation to session history before closing
+    if (selectedNode && conversation.length > 0) {
+      setSessionHistory(prev => ({
+        ...prev,
+        [selectedNode]: conversation
+      }));
+    }
+
     setDetailPanelOpen(false);
     // Reset state when closing
     setTimeout(() => {
@@ -185,7 +226,7 @@ export function NodeDetailPanel() {
       setQuestion('');
       isLoadingRef.current = false;
     }, 300);
-  }, [setDetailPanelOpen]);
+  }, [setDetailPanelOpen, selectedNode, conversation]);
 
   return (
     <Sheet open={isDetailPanelOpen} onOpenChange={handleClose}>
@@ -297,9 +338,33 @@ export function NodeDetailPanel() {
               {/* Conversation Section */}
               {conversation.length > 0 && (
                 <div>
-                  <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
-                    Follow-up Questions & Answers
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-responsive-sm font-semibold text-foreground">
+                      Conversation History
+                    </h3>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-responsive-xs text-muted-foreground">
+                        {conversation.filter(m => m.type === 'question').length} questions
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (selectedNode) {
+                            setConversation([]);
+                            setSessionHistory(prev => {
+                              const newHistory = { ...prev };
+                              delete newHistory[selectedNode];
+                              return newHistory;
+                            });
+                          }
+                        }}
+                        className="h-6 px-2 text-xs"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
                   <div className="space-y-4">
                     {conversation.map((message) => (
                       <div key={message.id} className="space-y-2">
@@ -411,13 +476,24 @@ export function NodeDetailPanel() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-responsive-sm font-semibold text-foreground">
-                  Ask a Follow-up Question
+                  Ask a Question
                 </h3>
-                {conversation.length > 0 && (
-                  <span className="text-responsive-xs text-muted-foreground">
-                    {conversation.filter(m => m.type === 'question').length} questions asked
-                  </span>
-                )}
+                <div className="flex items-center space-x-2">
+                  {conversation.length > 0 && (
+                    <span className="text-responsive-xs text-muted-foreground">
+                      {conversation.filter(m => m.type === 'question').length} questions asked
+                    </span>
+                  )}
+                  {selectedNode && sessionHistory[selectedNode] && sessionHistory[selectedNode].length > 0 && (
+                    <span className="text-responsive-xs text-green-600 dark:text-green-400">
+                      History saved
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-responsive-xs text-muted-foreground mb-2">
+                Your conversation history is preserved for each concept node during this session.
               </div>
 
               <form onSubmit={handleSubmitQuestion} className="relative">

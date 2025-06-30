@@ -12,19 +12,17 @@ import {
   Network,
   ExternalLink,
   ArrowLeft,
-  Share2,
-  MessageCircle
+  Share2
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { FileDropZone } from '@/components/FileDropZone';
 import { ConceptMapDisplay } from '@/components/ConceptMapDisplay';
-import { ChatSidebar } from '@/components/ChatSidebar';
 import { NodeDetailPanel } from '@/components/NodeDetailPanel';
 import { useScrollBehavior } from '@/hooks/use-scroll-behavior';
 import { BackToTopButton } from '@/components/BackToTopButton';
 
 export default function Home() {
-  const { isAuthenticated, mapHistory, currentMap, setChatSidebarOpen, isChatSidebarOpen } = useAppStore();
+  const { isAuthenticated, mapHistory, currentMap } = useAppStore();
 
   // Initialize scroll behavior
   useScrollBehavior();
@@ -66,16 +64,6 @@ export default function Home() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setChatSidebarOpen(!isChatSidebarOpen)}
-                  className="touch-target"
-                >
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  {isChatSidebarOpen ? 'Close Chat' : 'Chat'}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
                   onClick={() => window.open(`/maps/${currentMap.mongodb_doc_id}`, '_blank')}
                   className="touch-target"
                 >
@@ -87,11 +75,10 @@ export default function Home() {
           </div>
 
           {/* Map Content */}
-          <div className="flex-1 overflow-hidden flex">
+          <div className="flex-1 overflow-hidden">
             <div className="flex-1 max-w-7xl mx-auto p-4">
               <ConceptMapDisplay />
             </div>
-            <ChatSidebar />
           </div>
 
           {/* Node Detail Panel */}
