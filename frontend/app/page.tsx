@@ -15,21 +15,25 @@ import {
   Share2
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
+import { getHierarchicalMindMap } from '@/lib/api';
 import { FileDropZone } from '@/components/FileDropZone';
-import { ConceptMapDisplay } from '@/components/ConceptMapDisplay';
+import { HierarchicalMindMapDisplay } from '@/components/HierarchicalMindMapDisplay';
 import { NodeDetailPanel } from '@/components/NodeDetailPanel';
 import { useScrollBehavior } from '@/hooks/use-scroll-behavior';
 import { BackToTopButton } from '@/components/BackToTopButton';
 
 export default function Home() {
-  const { isAuthenticated, mapHistory, currentMap } = useAppStore();
+  const { isAuthenticated, mapHistory, currentMindMap } = useAppStore();
 
   // Initialize scroll behavior
   useScrollBehavior();
 
+  // Check if we have an active hierarchical mind map
+  const activeMap = currentMindMap;
+
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
-      {currentMap ? (
+      {activeMap ? (
         // Map View - when a map is loaded from sidebar
         <div className="h-screen flex flex-col">
           {/* Map Header */}
@@ -40,9 +44,9 @@ export default function Home() {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
-                    // Clear current map to go back to home view
-                    const { setCurrentMap } = useAppStore.getState();
-                    setCurrentMap(null);
+                    // Clear current mind map to go back to home view
+                    const { setCurrentMindMap } = useAppStore.getState();
+                    setCurrentMindMap(null);
                   }}
                   className="touch-target"
                   aria-label="Back to home"
@@ -52,10 +56,10 @@ export default function Home() {
 
                 <div className="min-w-0">
                   <h1 className="text-lg font-semibold text-foreground truncate">
-                    {currentMap.source_filename?.replace('.pdf', '') || 'Concept Map'}
+                    {currentMindMap?.title || 'Hierarchical Mind Map'}
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    Interactive concept map
+                    Hierarchical mind map visualization
                   </p>
                 </div>
               </div>
@@ -64,7 +68,12 @@ export default function Home() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => window.open(`/maps/${currentMap.mongodb_doc_id}`, '_blank')}
+                  onClick={() => {
+                    const mapId = currentMindMap?.mongodb_doc_id;
+                    if (mapId) {
+                      window.open(`/maps/${mapId}`, '_blank');
+                    }
+                  }}
                   className="touch-target"
                 >
                   <ExternalLink className="mr-2 h-4 w-4" />
@@ -75,9 +84,9 @@ export default function Home() {
           </div>
 
           {/* Map Content */}
-          <div className="flex-1 overflow-hidden">
-            <div className="flex-1 max-w-7xl mx-auto p-4">
-              <ConceptMapDisplay />
+          <div className="flex-1 overflow-hidden relative">
+            <div className="absolute inset-0 p-4">
+              <HierarchicalMindMapDisplay />
             </div>
           </div>
 
@@ -167,7 +176,6 @@ export default function Home() {
                     <Card
                       className="group hover:shadow-lg transition-all duration-200 cursor-pointer"
                       onClick={async () => {
-                        const { getConceptMap } = await import('@/lib/api');
                         const { useAppStore } = await import('@/lib/store');
                         const { toast } = await import('sonner');
 
@@ -175,20 +183,16 @@ export default function Home() {
                         if (!jwt) return;
 
                         try {
-                          const result = await getConceptMap(item.map_id, jwt);
+                          const result = await getHierarchicalMindMap(item.map_id, jwt);
                           if (result.data) {
-                            const mapWithFilename = {
-                              ...result.data,
-                              source_filename: item.source_filename
-                            };
-                            useAppStore.getState().setCurrentMap(mapWithFilename);
-                            toast.success('Map loaded successfully');
+                            useAppStore.getState().setCurrentMindMap(result.data);
+                            toast.success('Mind map loaded successfully');
                           } else {
-                            toast.error('Failed to load concept map');
+                            toast.error('Failed to load hierarchical mind map');
                           }
                         } catch (error) {
-                          console.error('Error loading map:', error);
-                          toast.error('Failed to load concept map');
+                          console.error('Error loading mind map:', error);
+                          toast.error('Failed to load hierarchical mind map');
                         }
                       }}
                     >
@@ -207,7 +211,7 @@ export default function Home() {
                         </div>
 
                         <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                          {item.source_filename.replace('.pdf', '')}
+                          {item.original_filename.replace('.pdf', '')}
                         </h3>
                       </div>
                     </Card>

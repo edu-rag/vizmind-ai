@@ -24,7 +24,7 @@ import {
   File
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { generateConceptMap } from '@/lib/api';
+import { generateHierarchicalMindMap } from '@/lib/api';
 import { toast } from 'sonner';
 import { AuthDialog } from './AuthDialog';
 import { cn } from '@/lib/utils';
@@ -51,7 +51,7 @@ export function FileDropZone() {
   const {
     isAuthenticated,
     jwt,
-    setCurrentMap,
+    setCurrentMindMap,
     addToHistory,
   } = useAppStore();
 
@@ -119,10 +119,10 @@ export function FileDropZone() {
 
     try {
       toast.success(`Processing ${files.length} PDF${files.length > 1 ? 's' : ''}...`, {
-        description: 'Creating unified concept map',
+        description: files.length > 1 ? 'Creating mind map from first file' : 'Creating hierarchical mind map',
       });
 
-      const result = await generateConceptMap(files, jwt);
+      const result = await generateHierarchicalMindMap(files[0], jwt);
 
       clearInterval(progressInterval);
 
@@ -137,51 +137,25 @@ export function FileDropZone() {
       }
 
       if (result.data) {
-        const mapData = result.data;
+        const mindMapData = result.data;
 
-        if (mapData.status === 'success') {
-          setUploadedFiles(prev => prev.map(f =>
-            newFiles.some(nf => nf.id === f.id)
-              ? { ...f, status: 'completed', progress: 100 }
-              : f
-          ));
+        setUploadedFiles(prev => prev.map(f =>
+          newFiles.some(nf => nf.id === f.id)
+            ? { ...f, status: 'completed', progress: 100 }
+            : f
+        ));
 
-          // Create title from attachments
-          const attachmentNames = mapData.attachments?.map((att: any) => att.filename) || [];
-          const title = attachmentNames.length > 1
-            ? `${attachmentNames[0]} + ${attachmentNames.length - 1} more`
-            : attachmentNames[0] || 'Unified Concept Map';
+        // Set the hierarchical mind map
+        setCurrentMindMap(mindMapData);
 
-          const newMap = {
-            mongodb_doc_id: mapData.mongodb_doc_id,
-            react_flow_data: mapData.react_flow_data,
-            source_filename: title,
-            attachments: mapData.attachments,
-          };
+        toast.success('Hierarchical mind map created!', {
+          description: files.length > 1
+            ? `Processed ${files[0].name}. Multiple file support coming soon.`
+            : 'Your document has been transformed into an interactive mind map',
+        });
 
-          setCurrentMap(newMap);
-
-          addToHistory({
-            map_id: mapData.mongodb_doc_id,
-            source_filename: title,
-            created_at: new Date().toISOString(),
-            attachments: mapData.attachments,
-          });
-
-          if (mapData.mongodb_doc_id) {
-            router.push(`/maps/${mapData.mongodb_doc_id}`);
-            toast.success('Concept map created successfully!');
-          }
-        } else {
-          setUploadedFiles(prev => prev.map(f =>
-            newFiles.some(nf => nf.id === f.id)
-              ? { ...f, status: 'error', progress: 0, error: mapData.error_message || 'Processing failed' }
-              : f
-          ));
-          toast.error('Failed to create concept map', {
-            description: mapData.error_message,
-          });
-        }
+        // Navigate to view the map
+        router.push('/');
       }
     } catch (error) {
       clearInterval(progressInterval);
@@ -224,10 +198,10 @@ export function FileDropZone() {
 
     try {
       toast.success('Processing your PDF...', {
-        description: 'Creating interactive concept map',
+        description: 'Creating hierarchical mind map',
       });
 
-      const result = await generateConceptMap([file], jwt);
+      const result = await generateHierarchicalMindMap(file, jwt);
 
       clearInterval(progressInterval);
 
@@ -241,45 +215,24 @@ export function FileDropZone() {
         return;
       }
 
-      if (result.data?.results?.[0]) {
-        const mapData = result.data.results[0];
+      if (result.data) {
+        const mindMapData = result.data;
 
-        if (mapData.status === 'success') {
-          setUploadedFiles(prev => prev.map(f =>
-            f.id === fileId
-              ? { ...f, status: 'completed', progress: 100 }
-              : f
-          ));
+        setUploadedFiles(prev => prev.map(f =>
+          f.id === fileId
+            ? { ...f, status: 'completed', progress: 100 }
+            : f
+        ));
 
-          const newMap = {
-            mongodb_doc_id: mapData.mongodb_doc_id,
-            react_flow_data: mapData.react_flow_data,
-            source_filename: mapData.filename,
-          };
+        // Set the hierarchical mind map
+        setCurrentMindMap(mindMapData);
 
-          setCurrentMap(newMap);
+        toast.success('Hierarchical mind map created!', {
+          description: 'Your document has been transformed into an interactive mind map',
+        });
 
-          addToHistory({
-            map_id: mapData.mongodb_doc_id,
-            source_filename: mapData.filename,
-            created_at: new Date().toISOString(),
-          });
-
-          toast.success('Concept map created!', {
-            description: 'Click to view your interactive map',
-            action: {
-              label: 'View Map',
-              onClick: () => router.push(`/maps/${mapData.mongodb_doc_id}`),
-            },
-          });
-        } else {
-          setUploadedFiles(prev => prev.map(f =>
-            f.id === fileId
-              ? { ...f, status: 'error', progress: 0, error: 'Processing failed' }
-              : f
-          ));
-          toast.error('Failed to process PDF');
-        }
+        // Navigate to view the map
+        router.push('/');
       }
     } catch (error) {
       clearInterval(progressInterval);

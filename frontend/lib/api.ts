@@ -55,15 +55,16 @@ export const authenticateWithGoogle = async (googleIdToken: string) => {
   });
 };
 
-// Generate concept map
-export const generateConceptMap = async (files: File[], jwt: string) => {
+// Legacy concept map generation - REMOVED
+// Use generateHierarchicalMindMap instead
+
+// Generate hierarchical mind map from PDF (NEW)
+export const generateHierarchicalMindMap = async (file: File, jwt: string) => {
   try {
     const formData = new FormData();
-    files.forEach(file => {
-      formData.append('files', file);
-    });
+    formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/maps/generate/`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/maps/generate-mindmap/`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${jwt}`,
@@ -78,7 +79,7 @@ export const generateConceptMap = async (files: File[], jwt: string) => {
     const data = await response.json();
     return { data };
   } catch (error) {
-    console.error('Generate concept map failed:', error);
+    console.error('Generate hierarchical mind map failed:', error);
     return { error: error instanceof Error ? error.message : 'Unknown error' };
   }
 };
@@ -88,29 +89,24 @@ export const getMapHistory = async (jwt: string) => {
   return makeRequest<{
     history: Array<{
       map_id: string;
-      source_filename: string;
+      title: string;
+      original_filename: string;
       created_at: string;
     }>;
   }>('/api/v1/maps/history/', {}, jwt);
 };
 
-// Get specific concept map
-export const getConceptMap = async (mapId: string, jwt: string) => {
+// Get specific hierarchical mind map
+export const getHierarchicalMindMap = async (mapId: string, jwt: string) => {
   return makeRequest<{
     mongodb_doc_id: string;
-    react_flow_data: {
-      nodes: Array<{
-        id: string;
-        data: { label: string };
-        position: { x: number; y: number };
-      }>;
-      edges: Array<{
-        id: string;
-        source: string;
-        target: string;
-        label?: string;
-      }>;
+    title: string;
+    hierarchical_data: {
+      id: string;
+      data: { label: string };
+      children: any[];
     };
+    original_filename?: string;
   }>(`/api/v1/maps/${mapId}`, {}, jwt);
 };
 

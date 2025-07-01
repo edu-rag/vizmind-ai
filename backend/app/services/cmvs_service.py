@@ -1,9 +1,14 @@
-from app.langgraph_pipeline.builder.cmvs_builder import get_langgraph_app
-from app.langgraph_pipeline.state import GraphState
+from app.langgraph_pipeline.builder.hierarchical_builder import (
+    get_hierarchical_langgraph_app,
+)
+from app.langgraph_pipeline.state import HierarchicalGraphState
 from app.core.config import settings, logger
 from app.models.cmvs_models import (
     NodeDetailResponse,
     CitationSource,
+    MindMapResponse,
+    AttachmentInfo as AttachmentInfoModel,
+    HierarchicalNode,
 )
 
 import uuid
@@ -48,21 +53,97 @@ except Exception as e:
     llm_instance = None
 
 
-async def run_cmvs_pipeline(initial_state: GraphState) -> GraphState:
-    logger.info(
-        f"Running CMVS pipeline for file: {initial_state.get('current_filename')}, User: {initial_state.get('user_id')}"
-    )
-    langgraph_app = get_langgraph_app()
+async def generate_hierarchical_mindmap(
+    filename: str, extracted_text: str, s3_path: str, user_id: str
+) -> MindMapResponse:
+    """
+    NEW: Generate hierarchical mind map using two-stage processing.
 
-    # Ensure a unique thread_id for each run if using MemorySaver or similar checkpointers
-    thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    Args:
+        filename: Original filename of the uploaded document
+        extracted_text: Extracted text from the PDF
+        s3_path: S3 path where the file is stored
+        user_id: ID of the user
 
-    final_state = await langgraph_app.ainvoke(initial_state, config=config)
+    Returns:
+        MindMapResponse with hierarchical data structure
+    """
     logger.info(
-        f"CMVS pipeline finished for file: {initial_state.get('current_filename')}"
+        f"Generating hierarchical mind map for file: {filename}, User: {user_id}"
     )
-    return final_state
+
+    try:
+        # Prepare initial state for hierarchical processing
+        initial_state = HierarchicalGraphState(
+            attachment={
+                "filename": filename,
+                "s3_path": s3_path,
+                "extracted_text": extracted_text,
+                "pages": [],  # Will be populated by the pipeline
+            },
+            user_id=user_id,
+            page_analyses=[],
+            consolidated_markdown="",
+            document_title="",
+            hierarchical_data={},
+            mongodb_doc_id=None,
+            error_message=None,
+        )
+
+        # Get the hierarchical LangGraph app
+        langgraph_app = get_hierarchical_langgraph_app()
+
+        # Generate unique thread ID for this run
+        thread_id = str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # Run the hierarchical pipeline
+        final_state = await langgraph_app.ainvoke(initial_state, config=config)
+
+        if final_state.get("error_message"):
+            logger.error(f"Pipeline error: {final_state['error_message']}")
+            return MindMapResponse(
+                attachment=AttachmentInfoModel(
+                    filename=filename,
+                    s3_path=s3_path,
+                    status="error",
+                    error_message=final_state["error_message"],
+                ),
+                status="error",
+                hierarchical_data=None,
+                mongodb_doc_id=None,
+                error_message=final_state["error_message"],
+            )
+
+        # Convert hierarchical data to HierarchicalNode model
+        hierarchical_node = HierarchicalNode(**final_state["hierarchical_data"])
+
+        logger.info(f"Successfully generated hierarchical mind map for {filename}")
+
+        return MindMapResponse(
+            attachment=AttachmentInfoModel(
+                filename=filename, s3_path=s3_path, status="success"
+            ),
+            status="success",
+            hierarchical_data=hierarchical_node,
+            mongodb_doc_id=final_state.get("mongodb_doc_id"),
+            error_message=None,
+        )
+
+    except Exception as e:
+        logger.error(f"Error in generate_hierarchical_mindmap: {e}", exc_info=True)
+        return MindMapResponse(
+            attachment=AttachmentInfoModel(
+                filename=filename, s3_path=s3_path, status="error", error_message=str(e)
+            ),
+            status="error",
+            hierarchical_data=None,
+            mongodb_doc_id=None,
+            error_message=f"Failed to generate mind map: {str(e)}",
+        )
+
+
+# === RAG FUNCTIONS ===
 
 
 async def get_rag_details_for_node(

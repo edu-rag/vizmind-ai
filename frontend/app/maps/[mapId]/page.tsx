@@ -20,10 +20,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ConceptMapDisplay } from '@/components/ConceptMapDisplay';
+import { HierarchicalMindMapDisplay } from '@/components/HierarchicalMindMapDisplay';
 import { NodeDetailPanel } from '@/components/NodeDetailPanel';
 import { useAppStore } from '@/lib/store';
-import { getConceptMap } from '@/lib/api';
+import { getHierarchicalMindMap } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -34,8 +34,8 @@ export default function MapPage() {
   const mapId = params.mapId as string;
 
   const {
-    currentMap,
-    setCurrentMap,
+    currentMindMap,
+    setCurrentMindMap,
     isAuthenticated,
     jwt,
     setSelectedNode,
@@ -72,18 +72,18 @@ export default function MapPage() {
     setError(null);
 
     try {
-      const result = await getConceptMap(mapId, jwt);
+      const result = await getHierarchicalMindMap(mapId, jwt);
 
       if (result.error) {
-        setError('Failed to load concept map');
+        setError('Failed to load hierarchical mind map');
         return;
       }
 
       if (result.data) {
-        setCurrentMap(result.data);
-        toast.success('Map loaded successfully');
+        setCurrentMindMap(result.data);
+        toast.success('Mind map loaded successfully');
       } else {
-        setError('Concept map not found');
+        setError('Hierarchical mind map not found');
       }
     } catch (error) {
       console.error('Error loading map:', error);
@@ -96,8 +96,8 @@ export default function MapPage() {
   const handleShare = async () => {
     try {
       await navigator.share({
-        title: currentMap?.source_filename || 'Concept Map',
-        text: 'Check out this interactive concept map',
+        title: currentMindMap?.title || 'Hierarchical Mind Map',
+        text: 'Check out this interactive hierarchical mind map',
         url: window.location.href,
       });
     } catch (error) {
@@ -113,8 +113,8 @@ export default function MapPage() {
   };
 
   const handleGoHome = () => {
-    // Clear current map and navigate home
-    setCurrentMap(null);
+    // Clear current mind map and navigate home
+    setCurrentMindMap(null);
     setSelectedNode(null);
     setDetailPanelOpen(false);
     router.push('/');
@@ -177,15 +177,15 @@ export default function MapPage() {
     );
   }
 
-  if (!currentMap) {
+  if (!currentMindMap) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <Card className="p-8 max-w-md mx-4 text-center">
           <h2 className="text-xl font-semibold text-foreground mb-2">
-            Map Not Found
+            Mind Map Not Found
           </h2>
           <p className="text-muted-foreground mb-6">
-            The concept map you're looking for doesn't exist or has been removed.
+            The hierarchical mind map you're looking for doesn't exist or has been removed.
           </p>
           <Button onClick={handleGoHome} variant="default">
             <Home className="mr-2 h-4 w-4" />
@@ -214,10 +214,10 @@ export default function MapPage() {
 
             <div className="min-w-0">
               <h1 className="text-lg font-semibold text-foreground truncate">
-                {currentMap.source_filename?.replace('.pdf', '') || 'Concept Map'}
+                {currentMindMap.title || 'Hierarchical Mind Map'}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Interactive concept map
+                Interactive hierarchical mind map
               </p>
             </div>
           </div>
@@ -285,9 +285,9 @@ export default function MapPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
-        <div className="flex-1 max-w-7xl mx-auto p-4">
-          <ConceptMapDisplay />
+      <main className="flex-1 overflow-hidden relative">
+        <div className="absolute inset-0 p-4">
+          <HierarchicalMindMapDisplay />
         </div>
       </main>
 

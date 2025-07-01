@@ -7,19 +7,35 @@ except ImportError:
     from pydantic import BaseModel as LangchainBaseModel
 
 
-# --- LLM Interaction Models ---
-class ConceptTripleLLM(BaseModel):  # Renamed to avoid conflict if used elsewhere
-    """Represents a single extracted concept triple for LLM output."""
+# --- Hierarchical Mind Map Models ---
+class HierarchicalNode(BaseModel):
+    """Represents a single node in the hierarchical mind map."""
 
-    source: str = Field(description="The source concept or entity.")
-    target: str = Field(description="The target concept or entity.")
-    relation: str = Field(description="The relationship between the source and target.")
+    id: str = Field(description="Unique identifier for the node")
+    data: Dict[str, str] = Field(description="Node data containing label")
+    children: List["HierarchicalNode"] = Field(default=[], description="Child nodes")
 
 
-class ExtractedTriplesLLM(BaseModel):  # Renamed
-    """Represents a list of extracted concept triples from a text chunk for LLM output."""
+# Enable forward references
+HierarchicalNode.model_rebuild()
 
-    triples: List[ConceptTripleLLM] = Field(description="A list of concept triples.")
+
+class PageAnalysisLLM(BaseModel):
+    """Represents extracted topics and key points from a single page."""
+
+    page_number: int = Field(description="The page number being analyzed")
+    page_markdown: str = Field(
+        description="Extracted topics and key points in markdown format"
+    )
+
+
+class MasterSynthesisLLM(BaseModel):
+    """Represents the final consolidated hierarchical markdown."""
+
+    title: str = Field(description="The main title/topic of the document")
+    hierarchical_markdown: str = Field(
+        description="Final consolidated markdown with hierarchical structure"
+    )
 
 
 # --- API Response Models ---
@@ -30,26 +46,21 @@ class AttachmentInfo(BaseModel):
     error_message: Optional[str] = None
 
 
-class CMVSResponse(BaseModel):
-    # For single concept map with multiple attachments
-    attachments: List[AttachmentInfo]
+class MindMapResponse(BaseModel):
+    """Response model for the new hierarchical mind map system."""
+
+    attachment: AttachmentInfo
     status: str
-    react_flow_data: Optional[Dict[str, Any]] = None
-    processed_triples: Optional[List[Dict[str, str]]] = None  # Triples after processing
-    mongodb_doc_id: Optional[str] = None  # Main CMVS doc ID
-    mongodb_chunk_ids: Optional[List[str]] = None  # IDs of stored chunk/embedding docs
+    hierarchical_data: Optional[HierarchicalNode] = None
+    mongodb_doc_id: Optional[str] = None
     error_message: Optional[str] = None
 
 
-# --- Multiple CMVS Response Model ---
-class MultipleCMVSResponse(BaseModel):
-    results: List[CMVSResponse]  # Keep for backward compatibility
-    overall_errors: Optional[List[str]] = None  # For errors not tied to a specific file
+# --- Legacy Models (REMOVED - using only hierarchical mind maps) ---
+# Legacy ReactFlow-based models have been removed
+# Use MindMapResponse for new hierarchical mind map workflow
 
-
-# --- Single Unified CMVS Response Model ---
-class UnifiedCMVSResponse(BaseModel):
-    concept_map: CMVSResponse
+# Legacy unified response model also removed - use MindMapResponse directly
 
 
 class RetrievedChunk(BaseModel):

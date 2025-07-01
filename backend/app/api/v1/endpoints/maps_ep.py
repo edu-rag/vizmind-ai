@@ -12,19 +12,17 @@ import uuid
 from app.core.config import logger
 from app.models.user_models import UserModelInDB
 from app.models.cmvs_models import (
-    CMVSResponse,
-    MultipleCMVSResponse,
     NodeDetailResponse,
     AttachmentInfo,
+    MindMapResponse,
 )
 from app.api.v1.deps import get_current_active_user
 from app.services.pdf_service import extract_text_from_pdf_bytes
 from app.services.s3_service import S3Service
 from app.services.cmvs_service import (
     get_node_details_with_rag,
-    run_cmvs_pipeline,
+    generate_hierarchical_mindmap,
 )
-from app.langgraph_pipeline.state import GraphState
 from app.db.mongodb_utils import get_db
 from app.core.config import settings
 from bson import ObjectId
@@ -40,20 +38,19 @@ async def get_map_history_endpoint(
     current_user: UserModelInDB = Depends(get_current_active_user),
 ):
     """
-    Retrieves the user's concept map history.
+    Retrieves the user's mind map history.
     """
     try:
         db = get_db()
         cm_collection = db[settings.MONGODB_CMVS_COLLECTION]
 
-        # Find all concept maps for the current user
+        # Find all mind maps for the current user
         maps_cursor = cm_collection.find(
             {"user_id": current_user.id},
             {
                 "_id": 1,
-                "unified_title": 1,
+                "title": 1,
                 "original_filename": 1,
-                "attachments": 1,
                 "created_at": 1,
             },
         ).sort(
@@ -62,26 +59,16 @@ async def get_map_history_endpoint(
 
         history = []
         for map_doc in maps_cursor:
-            # Support both new unified structure and legacy single file structure
-            if "unified_title" in map_doc:
-                title = map_doc["unified_title"]
-            elif "original_filename" in map_doc:
-                title = map_doc["original_filename"]
-            else:
-                title = "Unknown"
-
             history.append(
                 {
                     "map_id": str(map_doc["_id"]),
-                    "source_filename": title,
+                    "title": map_doc.get("title", "Unknown"),
+                    "original_filename": map_doc.get("original_filename", "Unknown"),
                     "created_at": (
                         map_doc.get("created_at").isoformat()
                         if map_doc.get("created_at")
                         else None
                     ),
-                    "attachments": map_doc.get(
-                        "attachments", []
-                    ),  # Include attachment info
                 }
             )
 
@@ -99,12 +86,12 @@ async def get_map_history_endpoint(
 
 
 @router.get("/{map_id}", tags=["Maps"])
-async def get_concept_map_endpoint(
+async def get_mind_map_endpoint(
     map_id: str,
     current_user: UserModelInDB = Depends(get_current_active_user),
 ):
     """
-    Retrieves a specific concept map by ID.
+    Retrieves a specific mind map by ID.
     """
     try:
         # Validate map_id is a valid ObjectId
@@ -114,7 +101,7 @@ async def get_concept_map_endpoint(
         db = get_db()
         cm_collection = db[settings.MONGODB_CMVS_COLLECTION]
 
-        # Find the concept map document
+        # Find the mind map document
         map_doc = cm_collection.find_one(
             {
                 "_id": ObjectId(map_id),
@@ -123,22 +110,23 @@ async def get_concept_map_endpoint(
         )
 
         if not map_doc:
-            raise HTTPException(status_code=404, detail="Concept map not found")
+            raise HTTPException(status_code=404, detail="Mind map not found")
 
-        # Get the react flow data
-        react_flow_data = map_doc.get("react_flow_data")
+        # Get the hierarchical data
+        hierarchical_data = map_doc.get("hierarchical_data")
 
-        if not react_flow_data:
-            logger.warning(f"Map {map_id} exists but has no react_flow_data")
-            # Return empty structure if no data exists
-            react_flow_data = {"nodes": [], "edges": []}
+        if not hierarchical_data:
+            logger.warning(f"Map {map_id} exists but has no hierarchical_data")
+            raise HTTPException(status_code=404, detail="Mind map data not found")
 
         response = {
             "mongodb_doc_id": str(map_doc["_id"]),
-            "react_flow_data": react_flow_data,
+            "title": map_doc.get("title", "Unknown"),
+            "hierarchical_data": hierarchical_data,
+            "original_filename": map_doc.get("original_filename"),
         }
 
-        logger.info(f"Retrieved concept map {map_id} for user {current_user.email}")
+        logger.info(f"Retrieved mind map {map_id} for user {current_user.email}")
         return response
 
     except HTTPException:
@@ -156,184 +144,103 @@ async def get_concept_map_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/generate/", response_model=CMVSResponse)
-async def generate_concept_map_secure_endpoint(
-    files: List[UploadFile] = File(
-        ..., description="One or more PDF files to process as a single concept map."
+@router.post("/generate-mindmap/", response_model=MindMapResponse, tags=["Mind Maps"])
+async def generate_mindmap_endpoint(
+    file: UploadFile = File(
+        ..., description="PDF file to process into a hierarchical mind map."
     ),
     current_user: UserModelInDB = Depends(get_current_active_user),
 ):
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
+    """
+    Generate hierarchical mind map from a single PDF document.
 
-    attachments = []
-    combined_text = ""
-    attachment_infos = []
+    This endpoint implements the new two-stage processing:
+    1. Page-by-page analysis using PageProcessorAgent
+    2. Master synthesis using MasterSynthesizerAgent
+    3. Returns hierarchical JSON structure compatible with reaflow
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
     logger.info(
-        f"User '{current_user.email}' (ID: {current_user.id}) initiated unified CMVS generation for {len(files)} file(s)."
+        f"User '{current_user.email}' initiated hierarchical mind map generation for file: {file.filename}"
     )
 
-    # Process all files first to extract text and upload to S3
-    for uploaded_file in files:
-        s3_file_path: Optional[str] = None
-        filename = (
-            uploaded_file.filename
-            if uploaded_file.filename
-            else f"unknown_file_{uuid.uuid4()}.pdf"
-        )
+    s3_file_path: Optional[str] = None
 
-        if uploaded_file.content_type != "application/pdf":
-            attachments.append(
-                AttachmentInfo(
-                    filename=filename,
-                    status="error",
-                    error_message="Invalid file type. Only PDF files are supported.",
-                )
-            )
-            logger.warning(
-                f"Invalid file type '{uploaded_file.content_type}' for file '{filename}' by user '{current_user.email}'."
-            )
-            continue
-
-        try:
-            logger.info(f"Processing file: {filename} for user: {current_user.email}")
-            pdf_bytes = await uploaded_file.read()
-
-            # S3 Upload Step
-            if s3_service_instance.is_configured():
-                s3_object_name = (
-                    f"user_{current_user.id}/uploads/{uuid.uuid4()}-{filename}"
-                )
-                s3_file_path = await s3_service_instance.upload_pdf_bytes_async(
-                    file_bytes=pdf_bytes, object_name=s3_object_name
-                )
-                if not s3_file_path:
-                    logger.warning(
-                        f"S3 upload failed for {filename}, but continuing concept map generation."
-                    )
-            else:
-                logger.info(
-                    "S3 client not configured or bucket not set. Skipping S3 upload."
-                )
-
-            # Text Extraction
-            extracted_text = await extract_text_from_pdf_bytes(pdf_bytes)
-            if not extracted_text.strip():
-                logger.warning(
-                    f"No text extracted from PDF '{filename}' for user '{current_user.email}'."
-                )
-                attachments.append(
-                    AttachmentInfo(
-                        filename=filename,
-                        s3_path=s3_file_path,
-                        status="error",
-                        error_message="No text extracted from PDF.",
-                    )
-                )
-                continue
-
-            # Add separator between documents if we have multiple files
-            if combined_text:
-                combined_text += f"\n\n--- Document: {filename} ---\n\n"
-            else:
-                combined_text += f"--- Document: {filename} ---\n\n"
-
-            combined_text += extracted_text
-
-            # Store attachment info for the graph state
-            attachment_infos.append(
-                {
-                    "filename": filename,
-                    "s3_path": s3_file_path,
-                    "extracted_text": extracted_text,
-                }
-            )
-
-            attachments.append(
-                AttachmentInfo(
-                    filename=filename,
-                    s3_path=s3_file_path,
-                    status="success",
-                )
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Error processing file '{filename}' for user '{current_user.email}': {e}",
-                exc_info=True,
-            )
-            attachments.append(
-                AttachmentInfo(
-                    filename=filename,
-                    s3_path=s3_file_path,
-                    status="error",
-                    error_message=str(e),
-                )
-            )
-
-    # Check if we have any successfully processed files
-    successful_attachments = [att for att in attachments if att.status == "success"]
-    if not successful_attachments:
-        return CMVSResponse(
-            attachments=attachments,
-            status="error",
-            error_message="No files were successfully processed.",
-        )
-
-    # Run the unified pipeline with combined text
     try:
-        initial_state = GraphState(
-            original_text=combined_text,
-            attachments=attachment_infos,
+        # Read file content
+        file_content = await file.read()
+
+        # Extract text from PDF
+        extracted_text = await extract_text_from_pdf_bytes(file_content)
+        if not extracted_text or len(extracted_text.strip()) < 50:
+            raise HTTPException(
+                status_code=422,
+                detail="Could not extract sufficient text from PDF. The file might be image-based or corrupted.",
+            )
+
+        # Upload file to S3
+        if s3_service_instance.is_configured():
+            s3_object_name = (
+                f"user_{current_user.id}/uploads/{uuid.uuid4()}-{file.filename}"
+            )
+            s3_file_path = await s3_service_instance.upload_pdf_bytes_async(
+                file_bytes=file_content, object_name=s3_object_name
+            )
+            logger.info(f"File uploaded to S3: {s3_file_path}")
+
+        # Generate hierarchical mind map
+        mindmap_response = await generate_hierarchical_mindmap(
+            filename=file.filename,
+            extracted_text=extracted_text,
+            s3_path=s3_file_path,
             user_id=current_user.id,
-            text_chunks=[],
-            embedded_chunks=[],
-            raw_triples=[],
-            processed_triples=[],
-            react_flow_data={},
-            mongodb_doc_id=None,
-            mongodb_chunk_ids=[],
-            error_message=None,
         )
 
-        final_graph_state_dict = await run_cmvs_pipeline(initial_state)
-
-        if final_graph_state_dict.get("error_message"):
+        if mindmap_response.status == "error":
             logger.error(
-                f"Pipeline error for unified concept map, user '{current_user.email}': {final_graph_state_dict['error_message']}"
+                f"Mind map generation failed: {mindmap_response.error_message}"
             )
-            return CMVSResponse(
-                attachments=attachments,
-                status="error",
-                error_message=final_graph_state_dict["error_message"],
-            )
-        else:
-            logger.info(
-                f"Successfully processed unified concept map for user '{current_user.email}' with {len(successful_attachments)} files."
-            )
-            return CMVSResponse(
-                attachments=attachments,
-                status="success",
-                react_flow_data=final_graph_state_dict.get("react_flow_data"),
-                processed_triples=final_graph_state_dict.get("processed_triples"),
-                mongodb_doc_id=final_graph_state_dict.get("mongodb_doc_id"),
-                mongodb_chunk_ids=final_graph_state_dict.get("mongodb_chunk_ids"),
-            )
+            raise HTTPException(status_code=500, detail=mindmap_response.error_message)
 
+        logger.info(
+            f"Successfully generated hierarchical mind map for file: {file.filename}"
+        )
+        return mindmap_response
+
+    except HTTPException:
+        # Clean up S3 file if upload succeeded but processing failed
+        if s3_file_path:
+            try:
+                await s3_service_instance.delete_file_async(s3_file_path)
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Failed to cleanup S3 file {s3_file_path}: {cleanup_error}"
+                )
+        raise
     except Exception as e:
+        # Clean up S3 file if upload succeeded but processing failed
+        if s3_file_path:
+            try:
+                await s3_service_instance.delete_file_async(s3_file_path)
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Failed to cleanup S3 file {s3_file_path}: {cleanup_error}"
+                )
+
         logger.error(
-            f"Unhandled error in unified pipeline for user '{current_user.email}': {e}",
-            exc_info=True,
+            f"Unhandled error in hierarchical mind map generation: {e}", exc_info=True
         )
-        return CMVSResponse(
-            attachments=attachments, status="error", error_message=str(e)
-        )
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
 
 @router.get("/details/", response_model=NodeDetailResponse, tags=["Maps"])
 async def get_node_details_rag_endpoint(
-    map_id: str = Query(..., description="The ID of the main concept map document."),
+    map_id: str = Query(..., description="The ID of the main mind map document."),
     node_query: str = Query(
         ..., description="The label/text of the tapped node (your question)."
     ),
@@ -348,7 +255,7 @@ async def get_node_details_rag_endpoint(
     """
     if not map_id or not node_query:
         raise HTTPException(
-            status_code=400, detail="concept_map_id and node_query are required."
+            status_code=400, detail="map_id and node_query are required."
         )
 
     response = await get_node_details_with_rag(
@@ -358,19 +265,13 @@ async def get_node_details_rag_endpoint(
         top_k_retriever=top_k,
     )
 
-    if (
-        "error occurred" in response.answer.lower()
-        or "critical error" in response.message.lower()
-    ):
-        pass
-
     return response
 
 
 @router.get("/ask/", response_model=NodeDetailResponse, tags=["Maps"])
 async def ask_question_about_node_endpoint(
     concept_map_id: str = Query(
-        ..., description="The ID of the main concept map document providing context."
+        ..., description="The ID of the main mind map document providing context."
     ),
     question: str = Query(
         ..., description="The specific question the user wants to ask."
@@ -385,7 +286,7 @@ async def ask_question_about_node_endpoint(
     current_user: UserModelInDB = Depends(get_current_active_user),
 ):
     """
-    Answers a specific question related to a concept/node within a given concept map,
+    Answers a specific question related to a concept/node within a given mind map,
     using a RAG pipeline with potential fallback to web search and source citation.
     """
     if not concept_map_id or not question:
@@ -414,12 +315,7 @@ async def ask_question_about_node_endpoint(
             top_k_retriever=top_k,
         )
 
-        # The get_node_details_with_rag function already returns NodeDetailRAGResponse,
-        # which includes handling for errors by setting a message in the answer.
-        # So, we can often return its response directly.
-        if (
-            not response
-        ):  # Should not happen if get_node_details_with_rag always returns a response object
+        if not response:
             logger.error(f"No response from RAG service for query: {effective_query}")
             raise HTTPException(
                 status_code=500, detail="Failed to process the question."
@@ -432,7 +328,7 @@ async def ask_question_about_node_endpoint(
             f"API Error in ask_question_about_node_endpoint for query '{effective_query}', map '{concept_map_id}': {e}",
             exc_info=True,
         )
-        # Return a NodeDetailRAGResponse compliant error structure
+        # Return a NodeDetailResponse compliant error structure
         return NodeDetailResponse(
             query=effective_query,
             answer=f"An internal server error occurred while processing your question: {str(e)}",

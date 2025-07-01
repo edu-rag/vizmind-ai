@@ -6,13 +6,9 @@ from contextlib import asynccontextmanager
 from app.core.config import settings, logger
 from app.api.v1.routers import api_router_v1
 from app.db.mongodb_utils import init_mongodb, get_mongo_client
-from app.services.s3_service import (
-    S3Service,
-)  # Assuming S3Service is structured this way
-from app.langgraph_pipeline.builder.cmvs_builder import build_graph_instance
+from app.services.s3_service import S3Service
 
 
-# Lifespan manager (assuming it's similar to previous versions)
 @asynccontextmanager
 async def lifespan(
     app_instance: FastAPI,
@@ -32,7 +28,6 @@ async def lifespan(
             "⚠️ S3 service not fully configured or client failed to initialize."
         )
 
-    app_instance.state.langgraph_app = build_graph_instance()
     logger.info("LangGraph app initialized.")
     yield
     logger.info("Application shutdown...")

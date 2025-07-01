@@ -2,35 +2,36 @@ from typing import List, Dict, Any, Optional, TypedDict
 from langchain_core.documents import Document
 
 
-class EmbeddedChunk(TypedDict):
-    text: str
-    embedding: List[float]
-    source_filename: Optional[str]  # Track which file this chunk came from
-    source_s3_path: Optional[str]  # Track the S3 path of the source file
+class PageAnalysisResult(TypedDict):
+    page_number: int
+    page_text: str
+    page_markdown: str
 
 
 class AttachmentInfo(TypedDict):
     filename: str
     s3_path: Optional[str]
     extracted_text: str
+    pages: List[str]  # Text content split by pages
 
 
-class GraphState(TypedDict):
+class HierarchicalGraphState(TypedDict):
     # Input states
-    original_text: str  # Combined text from all files
-    attachments: List[AttachmentInfo]  # Information about all uploaded files
+    attachment: AttachmentInfo  # Single file processing
     user_id: Optional[str]  # User's MongoDB ID
 
-    # Intermediate and output states
-    text_chunks: List[str]
-    embedded_chunks: Optional[List[EmbeddedChunk]]
-    raw_triples: List[Dict[str, str]]
-    processed_triples: List[Dict[str, str]]
-    react_flow_data: Dict[str, Any]
+    # Page-by-page analysis
+    page_analyses: List[PageAnalysisResult]
+
+    # Master synthesis
+    consolidated_markdown: str
+    document_title: str
+
+    # Final hierarchical structure
+    hierarchical_data: Dict[str, Any]
 
     # DB Interaction results
-    mongodb_doc_id: Optional[str]  # ID of the main concept map document
-    mongodb_chunk_ids: Optional[List[str]]  # IDs of stored chunk/embedding documents
+    mongodb_doc_id: Optional[str]  # ID of the mind map document
 
     # Error handling
     error_message: Optional[str]

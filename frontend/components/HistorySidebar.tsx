@@ -29,7 +29,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { getMapHistory, getConceptMap } from '@/lib/api';
+import { getMapHistory, getHierarchicalMindMap } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -43,10 +43,10 @@ export function HistorySidebar() {
     isAuthenticated,
     mapHistory,
     isSidebarCollapsed,
-    currentMap,
+    currentMindMap,
     setMapHistory,
     setSidebarCollapsed,
-    setCurrentMap,
+    setCurrentMindMap,
     logout,
   } = useAppStore();
 
@@ -94,27 +94,20 @@ export function HistorySidebar() {
     if (!jwt) return;
 
     try {
-      // Find the map item to get the source filename
-      const mapItem = mapHistory.find(item => item.map_id === mapId);
-
-      // Load the map data
-      const result = await getConceptMap(mapId, jwt);
+      // Load the hierarchical mind map data
+      const result = await getHierarchicalMindMap(mapId, jwt);
 
       if (result.data) {
-        // Set as current map and navigate to home, including the source filename
-        const mapWithFilename = {
-          ...result.data,
-          source_filename: mapItem?.source_filename
-        };
-        setCurrentMap(mapWithFilename);
+        // Set as current mind map and navigate to home
+        setCurrentMindMap(result.data);
         router.push('/');
-        toast.success('Map loaded successfully');
+        toast.success('Mind map loaded successfully');
       } else {
-        toast.error('Failed to load concept map');
+        toast.error('Failed to load hierarchical mind map');
       }
     } catch (error) {
-      console.error('Error loading map:', error);
-      toast.error('Failed to load concept map');
+      console.error('Error loading mind map:', error);
+      toast.error('Failed to load hierarchical mind map');
     }
 
     if (isMobile) {
@@ -123,7 +116,7 @@ export function HistorySidebar() {
   };
 
   const handleNewMap = () => {
-    setCurrentMap(null);
+    setCurrentMindMap(null);
     router.push('/');
     if (isMobile) {
       setSidebarCollapsed(true);
@@ -386,7 +379,7 @@ export function HistorySidebar() {
                               className={cn(
                                 'p-4 cursor-pointer transition-all duration-200 touch-target group w-full overflow-hidden',
                                 'focus-visible-ring hover:shadow-md',
-                                currentMap?.mongodb_doc_id === item.map_id
+                                currentMindMap?.mongodb_doc_id === item.map_id
                                   ? 'bg-primary/5 border-primary/20 shadow-sm'
                                   : 'hover:bg-accent/50 border-border',
                                 hoveredMapId === item.map_id && 'shadow-lg'
@@ -402,12 +395,12 @@ export function HistorySidebar() {
                                   handleMapClick(item.map_id);
                                 }
                               }}
-                              aria-label={`Open map: ${item.source_filename}`}
+                              aria-label={`Open map: ${item.title || item.original_filename || 'Untitled Mind Map'}`}
                             >
                               <div className="flex items-start space-x-3 w-full min-w-0">
                                 <div className={cn(
                                   'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
-                                  currentMap?.mongodb_doc_id === item.map_id
+                                  currentMindMap?.mongodb_doc_id === item.map_id
                                     ? 'bg-primary text-primary-foreground'
                                     : 'bg-muted group-hover:bg-primary/10'
                                 )}>
@@ -415,7 +408,7 @@ export function HistorySidebar() {
                                 </div>
                                 <div className="flex-1 min-w-0 overflow-hidden">
                                   <p className="text-responsive-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                    {item.source_filename.replace('.pdf', '')}
+                                    {item.title || item.original_filename?.replace('.pdf', '') || 'Untitled Mind Map'}
                                   </p>
                                   <div className="flex items-center space-x-2 mt-1 min-w-0">
                                     <p className="text-responsive-xs text-muted-foreground flex-shrink-0">

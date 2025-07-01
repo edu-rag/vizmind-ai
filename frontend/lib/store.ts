@@ -17,31 +17,25 @@ export interface AttachmentInfo {
 
 export interface MapHistoryItem {
   map_id: string;
-  source_filename: string;
+  title: string;
+  original_filename: string;
   created_at: string;
   attachments?: AttachmentInfo[];
 }
 
-export interface ReactFlowData {
-  nodes: Array<{
-    id: string;
-    data: { label: string };
-    position: { x: number; y: number };
-    type?: string;
-  }>;
-  edges: Array<{
-    id: string;
-    source: string;
-    target: string;
-    type?: string;
-    label?: string;
-  }>;
+// Legacy ReactFlow interfaces removed - using only hierarchical mind maps
+
+export interface HierarchicalNode {
+  id: string;
+  data: { label: string };
+  children: HierarchicalNode[];
 }
 
-export interface ConceptMap {
+export interface HierarchicalMindMap {
   mongodb_doc_id: string;
-  react_flow_data: ReactFlowData;
-  source_filename?: string;
+  hierarchical_data: HierarchicalNode;
+  title: string;
+  original_filename?: string;
 }
 
 interface AppState {
@@ -50,9 +44,17 @@ interface AppState {
   jwt: string | null;
   isAuthenticated: boolean;
 
-  // Maps
-  currentMap: ConceptMap | null;
+  // Legacy map history - kept for backward compatibility during transition
   mapHistory: MapHistoryItem[];
+
+  // NEW: Hierarchical Mind Maps
+  currentMindMap: HierarchicalMindMap | null;
+  mindMapHistory: Array<{
+    id: string;
+    title: string;
+    original_filename: string;
+    created_at: string;
+  }>;
 
   // UI State
   selectedNode: string | null;
@@ -64,7 +66,7 @@ interface AppState {
   // Actions
   setUser: (user: User | null) => void;
   setJWT: (jwt: string | null) => void;
-  setCurrentMap: (map: ConceptMap | null) => void;
+  setCurrentMindMap: (mindMap: HierarchicalMindMap | null) => void;
   setMapHistory: (history: MapHistoryItem[]) => void;
   addToHistory: (item: MapHistoryItem) => void;
   setSelectedNode: (nodeId: string | null) => void;
@@ -82,8 +84,9 @@ export const useAppStore = create<AppState>()(
       user: null,
       jwt: null,
       isAuthenticated: false,
-      currentMap: null,
       mapHistory: [],
+      currentMindMap: null,
+      mindMapHistory: [],
       selectedNode: null,
       isDetailPanelOpen: false,
       isSidebarCollapsed: false,
@@ -93,7 +96,7 @@ export const useAppStore = create<AppState>()(
       // Actions
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setJWT: (jwt) => set({ jwt }),
-      setCurrentMap: (map) => set({ currentMap: map }),
+      setCurrentMindMap: (mindMap) => set({ currentMindMap: mindMap }),
       setMapHistory: (history) => set({ mapHistory: history }),
       addToHistory: (item) => set({ mapHistory: [item, ...get().mapHistory] }),
       setSelectedNode: (nodeId) => set({ selectedNode: nodeId }),
@@ -105,7 +108,7 @@ export const useAppStore = create<AppState>()(
         user: null,
         jwt: null,
         isAuthenticated: false,
-        currentMap: null,
+        currentMindMap: null,
         selectedNode: null,
         isDetailPanelOpen: false
       }),

@@ -20,7 +20,7 @@ export function NodeDetailPanel() {
     selectedNode,
     isDetailPanelOpen,
     setDetailPanelOpen,
-    currentMap,
+    currentMindMap,
     jwt,
   } = useAppStore();
 
@@ -52,9 +52,27 @@ export function NodeDetailPanel() {
   const questionInputRef = useRef<HTMLInputElement>(null);
   const isLoadingRef = useRef(false);
 
-  const selectedNodeData = currentMap?.react_flow_data.nodes.find(
-    (node) => node.id === selectedNode
-  );
+  // Helper function to find a node in the hierarchical structure
+  const findNodeInHierarchy = useCallback((hierarchy: any, nodeId: string): { id: string; data: { label: string } } | null => {
+    if (!hierarchy) return null;
+
+    if (hierarchy.id === nodeId) {
+      return { id: hierarchy.id, data: { label: hierarchy.data.label } };
+    }
+
+    if (hierarchy.children) {
+      for (const child of hierarchy.children) {
+        const found = findNodeInHierarchy(child, nodeId);
+        if (found) return found;
+      }
+    }
+
+    return null;
+  }, []);
+
+  const selectedNodeData = currentMindMap?.hierarchical_data
+    ? findNodeInHierarchy(currentMindMap.hierarchical_data, selectedNode || '')
+    : null;
 
   useEffect(() => {
     const checkMobile = () => {
@@ -67,14 +85,14 @@ export function NodeDetailPanel() {
   }, []);
 
   const handleGetNodeDetails = useCallback(async () => {
-    if (!currentMap || !jwt || !selectedNodeData || isLoadingRef.current) return;
+    if (!currentMindMap || !jwt || !selectedNodeData || isLoadingRef.current) return;
 
     isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
       const result = await getNodeDetails(
-        currentMap.mongodb_doc_id,
+        currentMindMap.mongodb_doc_id,
         selectedNodeData.data.label,
         jwt
       );
@@ -92,10 +110,10 @@ export function NodeDetailPanel() {
       isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [currentMap, jwt, selectedNodeData]);
+  }, [currentMindMap, jwt, selectedNodeData]);
 
   useEffect(() => {
-    if (selectedNode && selectedNodeData && currentMap && jwt) {
+    if (selectedNode && selectedNodeData && currentMindMap && jwt) {
       // Auto-fetch node details using the /details endpoint
       handleGetNodeDetails();
 
@@ -141,7 +159,7 @@ export function NodeDetailPanel() {
   }, [isDetailPanelOpen]);
 
   const handleAskQuestion = useCallback(async (questionText: string) => {
-    if (!currentMap || !jwt || !selectedNodeData || !selectedNode) return;
+    if (!currentMindMap || !jwt || !selectedNodeData || !selectedNode) return;
 
     // Add the question to conversation immediately
     const questionId = Date.now().toString();
@@ -160,7 +178,7 @@ export function NodeDetailPanel() {
 
     try {
       const result = await askQuestion(
-        currentMap.mongodb_doc_id,
+        currentMindMap.mongodb_doc_id,
         questionText,
         jwt,
         selectedNodeData.data.label
@@ -198,7 +216,7 @@ export function NodeDetailPanel() {
     } finally {
       setIsAsking(false);
     }
-  }, [currentMap, jwt, selectedNodeData, selectedNode, conversation]);
+  }, [currentMindMap, jwt, selectedNodeData, selectedNode, conversation]);
 
   const handleSubmitQuestion = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
