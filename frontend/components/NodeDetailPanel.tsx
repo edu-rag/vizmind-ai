@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -17,16 +17,37 @@ import { cn } from '@/lib/utils';
 
 export function NodeDetailPanel() {
   const {
-    selectedNode,
+    selectedNodeData,
     isDetailPanelOpen,
     setDetailPanelOpen,
     currentMindMap,
     jwt,
   } = useAppStore();
 
+  console.log('🏪 Store state:', {
+    selectedNodeData,
+    isDetailPanelOpen,
+    hasCurrentMindMap: !!currentMindMap,
+    hasJwt: !!jwt,
+    mindMapId: currentMindMap?.mongodb_doc_id,
+    nodeLabel: selectedNodeData?.data.label
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [initialAnswer, setInitialAnswer] = useState<string | null>(null);
   const [initialCitedSources, setInitialCitedSources] = useState<any[]>([]);
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+
+  // Debug effect to track state changes
+  useEffect(() => {
+    console.log('💾 State update:', {
+      isLoading,
+      hasInitialAnswer: !!initialAnswer,
+      initialAnswerLength: initialAnswer?.length || 0,
+      citedSourcesCount: initialCitedSources.length,
+      currentNodeId
+    });
+  }, [isLoading, initialAnswer, initialCitedSources, currentNodeId]);
   const [conversation, setConversation] = useState<Array<{
     id: string;
     type: 'question' | 'answer';
@@ -70,10 +91,6 @@ export function NodeDetailPanel() {
     return null;
   }, []);
 
-  const selectedNodeData = currentMindMap?.hierarchical_data
-    ? findNodeInHierarchy(currentMindMap.hierarchical_data, selectedNode || '')
-    : null;
-
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -85,46 +102,105 @@ export function NodeDetailPanel() {
   }, []);
 
   const handleGetNodeDetails = useCallback(async () => {
-    if (!currentMindMap || !jwt || !selectedNodeData || isLoadingRef.current) return;
+    console.log('🔍 handleGetNodeDetails called:', {
+      hasCurrentMindMap: !!currentMindMap,
+      hasJwt: !!jwt,
+      selectedNodeData,
+      isLoadingRefCurrent: isLoadingRef.current,
+      mapId: currentMindMap?.mongodb_doc_id
+    });
+
+    if (!currentMindMap || !jwt || !selectedNodeData || isLoadingRef.current) {
+      console.log('❌ Early return from handleGetNodeDetails:', {
+        missingCurrentMindMap: !currentMindMap,
+        missingJwt: !jwt,
+        missingSelectedNodeData: !selectedNodeData,
+        isAlreadyLoading: isLoadingRef.current
+      });
+      return;
+    }
+
+    // Use the node label for the query
+    const nodeQuery = selectedNodeData.data.label;
+    console.log('🔎 Using nodeQuery:', nodeQuery);
 
     isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
+      console.log('🚀 Making API call to getNodeDetails...');
       const result = await getNodeDetails(
         currentMindMap.mongodb_doc_id,
-        selectedNodeData.data.label,
+        nodeQuery,
         jwt
       );
 
+      console.log('✅ API result:', result);
+
       if (result.data) {
+        console.log('🔍 API result.data:', JSON.stringify(result.data, null, 2));
         setInitialAnswer(result.data.answer);
         setInitialCitedSources(result.data.cited_sources || []);
+        console.log('📝 Node details set successfully - answer length:', result.data.answer?.length);
       } else {
+        console.log('❌ No data in API result');
         toast.error('Failed to get node details');
       }
     } catch (error) {
       toast.error('Failed to fetch node details');
-      console.error('Node details error:', error);
+      console.error('💥 Node details error:', error);
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
+      console.log('🏁 Finished API call');
     }
   }, [currentMindMap, jwt, selectedNodeData]);
 
   useEffect(() => {
-    if (selectedNode && selectedNodeData && currentMindMap && jwt) {
-      // Auto-fetch node details using the /details endpoint
-      handleGetNodeDetails();
+    console.log('🎯 Effect triggered for API call:', {
+      selectedNodeData,
+      hasCurrentMindMap: !!currentMindMap,
+      hasJwt: !!jwt,
+      mapId: currentMindMap?.mongodb_doc_id
+    });
 
-      // Load conversation history for this node
-      if (sessionHistory[selectedNode]) {
-        setConversation(sessionHistory[selectedNode]);
+    if (selectedNodeData && currentMindMap && jwt) {
+      console.log('✅ Conditions met, calling handleGetNodeDetails');
+      handleGetNodeDetails();
+    } else {
+      console.log('❌ Conditions not met for API call');
+    }
+  }, [selectedNodeData, currentMindMap, jwt, handleGetNodeDetails]);
+
+  // Reset loading state and clear previous data when node changes or panel opens
+  useEffect(() => {
+    if (isDetailPanelOpen && selectedNodeData) {
+      console.log('🔄 Reset effect triggered:', { selectedNodeId: selectedNodeData.id, currentNodeId });
+
+      // Only reset loading state, don't clear data unless switching nodes
+      if (currentNodeId !== selectedNodeData.id) {
+        console.log('🗑️ Clearing data for node switch from', currentNodeId, 'to', selectedNodeData.id);
+        setInitialAnswer(null);
+        setInitialCitedSources([]);
+        setCurrentNodeId(selectedNodeData.id);
+      }
+
+      // Always reset loading state
+      isLoadingRef.current = false;
+      setIsLoading(false);
+    }
+  }, [isDetailPanelOpen, selectedNodeData, currentNodeId]);
+
+  // Separate effect for loading conversation history
+  useEffect(() => {
+    if (selectedNodeData) {
+      if (sessionHistory[selectedNodeData.id]) {
+        setConversation(sessionHistory[selectedNodeData.id]);
       } else {
         setConversation([]);
       }
     }
-  }, [selectedNode, handleGetNodeDetails, sessionHistory]);
+  }, [selectedNodeData, sessionHistory]);
 
   // Separate effect for focusing input when panel opens
   useEffect(() => {
@@ -159,7 +235,7 @@ export function NodeDetailPanel() {
   }, [isDetailPanelOpen]);
 
   const handleAskQuestion = useCallback(async (questionText: string) => {
-    if (!currentMindMap || !jwt || !selectedNodeData || !selectedNode) return;
+    if (!currentMindMap || !jwt || !selectedNodeData) return;
 
     // Add the question to conversation immediately
     const questionId = Date.now().toString();
@@ -168,7 +244,7 @@ export function NodeDetailPanel() {
       type: 'question' as const,
       content: questionText,
       timestamp: new Date(),
-      nodeId: selectedNode
+      nodeId: selectedNodeData.id
     };
 
     const newConversation = [...conversation, questionMessage];
@@ -194,7 +270,7 @@ export function NodeDetailPanel() {
           content: responseData.answer,
           citedSources: responseData.cited_sources || [],
           timestamp: new Date(),
-          nodeId: selectedNode
+          nodeId: selectedNodeData.id
         };
 
         const updatedConversation = [...newConversation, answerMessage];
@@ -203,7 +279,7 @@ export function NodeDetailPanel() {
         // Save to session history
         setSessionHistory(prev => ({
           ...prev,
-          [selectedNode]: updatedConversation
+          [selectedNodeData.id]: updatedConversation
         }));
 
         toast.success('Question answered successfully');
@@ -216,7 +292,7 @@ export function NodeDetailPanel() {
     } finally {
       setIsAsking(false);
     }
-  }, [currentMindMap, jwt, selectedNodeData, selectedNode, conversation]);
+  }, [currentMindMap, jwt, selectedNodeData, conversation]);
 
   const handleSubmitQuestion = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,28 +302,36 @@ export function NodeDetailPanel() {
     setQuestion('');
   }, [question, handleAskQuestion]);
 
-  const handleClose = useCallback(() => {
-    // Save current conversation to session history before closing
-    if (selectedNode && conversation.length > 0) {
-      setSessionHistory(prev => ({
-        ...prev,
-        [selectedNode]: conversation
-      }));
-    }
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      // Save current conversation to session history before closing
+      if (selectedNodeData && conversation.length > 0) {
+        setSessionHistory(prev => ({
+          ...prev,
+          [selectedNodeData.id]: conversation
+        }));
+      }
 
-    setDetailPanelOpen(false);
-    // Reset state when closing
-    setTimeout(() => {
-      setInitialAnswer(null);
-      setInitialCitedSources([]);
-      setConversation([]);
-      setQuestion('');
-      isLoadingRef.current = false;
-    }, 300);
-  }, [setDetailPanelOpen, selectedNode, conversation]);
+      setDetailPanelOpen(false);
+      // Reset state when closing
+      setTimeout(() => {
+        setInitialAnswer(null);
+        setInitialCitedSources([]);
+        setConversation([]);
+        setQuestion('');
+        isLoadingRef.current = false;
+      }, 300);
+    } else {
+      setDetailPanelOpen(true);
+    }
+  }, [setDetailPanelOpen, selectedNodeData, conversation]);
+
+  const handleClose = useCallback(() => {
+    handleOpenChange(false);
+  }, [handleOpenChange]);
 
   return (
-    <Sheet open={isDetailPanelOpen} onOpenChange={handleClose}>
+    <Sheet open={isDetailPanelOpen} onOpenChange={handleOpenChange}>
       <SheetContent
         className={cn(
           'p-0 flex flex-col',
@@ -368,11 +452,11 @@ export function NodeDetailPanel() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          if (selectedNode) {
+                          if (selectedNodeData) {
                             setConversation([]);
                             setSessionHistory(prev => {
                               const newHistory = { ...prev };
-                              delete newHistory[selectedNode];
+                              delete newHistory[selectedNodeData.id];
                               return newHistory;
                             });
                           }
@@ -502,7 +586,7 @@ export function NodeDetailPanel() {
                       {conversation.filter(m => m.type === 'question').length} questions asked
                     </span>
                   )}
-                  {selectedNode && sessionHistory[selectedNode] && sessionHistory[selectedNode].length > 0 && (
+                  {selectedNodeData && sessionHistory[selectedNodeData.id] && sessionHistory[selectedNodeData.id].length > 0 && (
                     <span className="text-responsive-xs text-green-600 dark:text-green-400">
                       History saved
                     </span>

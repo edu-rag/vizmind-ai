@@ -57,7 +57,7 @@ interface AppState {
   }>;
 
   // UI State
-  selectedNode: string | null;
+  selectedNodeData: HierarchicalNode | null;
   isDetailPanelOpen: boolean;
   isSidebarCollapsed: boolean;
   isLoading: boolean;
@@ -69,7 +69,7 @@ interface AppState {
   setCurrentMindMap: (mindMap: HierarchicalMindMap | null) => void;
   setMapHistory: (history: MapHistoryItem[]) => void;
   addToHistory: (item: MapHistoryItem) => void;
-  setSelectedNode: (nodeId: string | null) => void;
+  setSelectedNodeData: (nodeData: HierarchicalNode | null) => void;
   setDetailPanelOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -87,7 +87,7 @@ export const useAppStore = create<AppState>()(
       mapHistory: [],
       currentMindMap: null,
       mindMapHistory: [],
-      selectedNode: null,
+      selectedNodeData: null,
       isDetailPanelOpen: false,
       isSidebarCollapsed: false,
       isLoading: false,
@@ -99,8 +99,14 @@ export const useAppStore = create<AppState>()(
       setCurrentMindMap: (mindMap) => set({ currentMindMap: mindMap }),
       setMapHistory: (history) => set({ mapHistory: history }),
       addToHistory: (item) => set({ mapHistory: [item, ...get().mapHistory] }),
-      setSelectedNode: (nodeId) => set({ selectedNode: nodeId }),
-      setDetailPanelOpen: (open) => set({ isDetailPanelOpen: open }),
+      setSelectedNodeData: (nodeData) => {
+        console.log('🏪 setSelectedNodeData called with:', nodeData);
+        set({ selectedNodeData: nodeData });
+      },
+      setDetailPanelOpen: (open) => {
+        console.log('🏪 setDetailPanelOpen called with:', open);
+        set({ isDetailPanelOpen: open });
+      },
       setSidebarCollapsed: (collapsed) => set({ isSidebarCollapsed: collapsed }),
       setLoading: (loading) => set({ isLoading: loading }),
       setUploadProgress: (progress) => set({ uploadProgress: progress }),
@@ -109,7 +115,7 @@ export const useAppStore = create<AppState>()(
         jwt: null,
         isAuthenticated: false,
         currentMindMap: null,
-        selectedNode: null,
+        selectedNodeData: null,
         isDetailPanelOpen: false
       }),
     }),

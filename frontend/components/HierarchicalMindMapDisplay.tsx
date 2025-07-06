@@ -15,15 +15,59 @@ interface HierarchicalNode {
 }
 
 // Custom Node Component
-const CustomNode = ({ id, width = 120, height = 40, ...nodeProps }: any) => {
-  const { selectedNode, setSelectedNode, setDetailPanelOpen } = useAppStore();
+const CustomNode = ({ id, width = 120, height = 40, nodeMapping, ...nodeProps }: any) => {
+  const { selectedNodeData, setSelectedNodeData, setDetailPanelOpen } = useAppStore();
 
   const handleClick = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
     console.log('Node clicked:', id);
-    setSelectedNode(id);
-    setDetailPanelOpen(true);
-  }, [id, setSelectedNode, setDetailPanelOpen]);
+    console.log('Available node mappings:', Array.from(nodeMapping.keys()));
+
+    // First try the direct ID
+    let fullNodeData = nodeMapping.get(id);
+
+    if (!fullNodeData) {
+      // Reaflow seems to modify IDs by adding prefixes like "ref-5-node-"
+      // Try to extract the original ID by looking for patterns
+      let originalId = id;
+
+      // Remove common reaflow prefixes
+      if (id.startsWith('ref-')) {
+        // Pattern: "ref-5-node-node-18" -> "node-18"
+        const parts = id.split('-');
+        if (parts.length >= 4 && parts[2] === 'node') {
+          originalId = parts.slice(3).join('-');
+        }
+      }
+
+      console.log('Trying to find original ID:', originalId, 'from reaflow ID:', id);
+      fullNodeData = nodeMapping.get(originalId);
+
+      if (!fullNodeData) {
+        // Try even more flexible matching - look for any node that ends with the same suffix
+        for (const [mappingId, nodeData] of nodeMapping.entries()) {
+          if (id.endsWith(mappingId) || mappingId === originalId || id.includes(mappingId)) {
+            fullNodeData = nodeData;
+            console.log('Found node via flexible match:', mappingId, '->', id);
+            break;
+          }
+        }
+      }
+    }
+
+    console.log('Found node data:', fullNodeData);
+
+    if (fullNodeData) {
+      console.log('Setting selected node data and opening panel');
+      setSelectedNodeData(fullNodeData);
+      setTimeout(() => {
+        setDetailPanelOpen(true);
+      }, 0);
+    } else {
+      console.warn('Could not find node data for id:', id);
+      console.warn('Available IDs:', Array.from(nodeMapping.keys()));
+    }
+  }, [id, setSelectedNodeData, setDetailPanelOpen, nodeMapping]);
 
   return (
     <ReaflowNode
@@ -37,7 +81,25 @@ const CustomNode = ({ id, width = 120, height = 40, ...nodeProps }: any) => {
         className={cn(
           'w-full h-full px-2 py-1 rounded-md border-2 bg-background transition-all duration-200 shadow-sm flex items-center justify-center text-center cursor-pointer',
           'hover:border-primary/50 hover:shadow-md hover:scale-105',
-          selectedNode === id
+          // Check if this node is selected by comparing with the stored selectedNodeData
+          (() => {
+            if (!selectedNodeData) return false;
+
+            // Direct match
+            if (selectedNodeData.id === id) return true;
+
+            // Check if the reaflow ID corresponds to this node
+            // Pattern: "ref-5-node-node-18" should match selectedNodeData.id "node-18"
+            if (id.startsWith('ref-')) {
+              const parts = id.split('-');
+              if (parts.length >= 4 && parts[2] === 'node') {
+                const originalId = parts.slice(3).join('-');
+                return selectedNodeData.id === originalId;
+              }
+            }
+
+            return false;
+          })()
             ? 'border-primary bg-primary/5 shadow-lg'
             : 'border-border'
         )}
@@ -70,9 +132,14 @@ const CustomEdge = (edgeProps: any) => {
  * Convert hierarchical JSON to reaflow format
  * This is the core function that transforms any hierarchy into flat nodes and edges
  */
-function convertHierarchyToReaflow(hierarchy: HierarchicalNode): { nodes: NodeData[], edges: EdgeData[] } {
+function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
+  nodes: NodeData[],
+  edges: EdgeData[],
+  nodeMapping: Map<string, HierarchicalNode>
+} {
   const nodes: NodeData[] = [];
   const edges: EdgeData[] = [];
+  const nodeMapping = new Map<string, HierarchicalNode>();
 
   function traverse(node: HierarchicalNode, parentId: string | null = null) {
     // Calculate dynamic width based on text length - much smaller and more reasonable
@@ -85,6 +152,9 @@ function convertHierarchyToReaflow(hierarchy: HierarchicalNode): { nodes: NodeDa
       width: textWidth,
       height: 40, // Reduced height
     });
+
+    // Store the mapping between the node ID and the full node data
+    nodeMapping.set(node.id, node);
 
     // If this node has a parent, create an edge
     if (parentId) {
@@ -104,16 +174,17 @@ function convertHierarchyToReaflow(hierarchy: HierarchicalNode): { nodes: NodeDa
   // Start the traversal
   traverse(hierarchy);
 
-  return { nodes, edges };
+  return { nodes, edges, nodeMapping };
 }
 
 export function HierarchicalMindMapDisplay() {
-  const { currentMindMap, selectedNode, setSelectedNode, setDetailPanelOpen } = useAppStore();
+  const { currentMindMap, selectedNodeData, setSelectedNodeData, setDetailPanelOpen } = useAppStore();
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [edges, setEdges] = useState<EdgeData[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [nodeMapping, setNodeMapping] = useState<Map<string, HierarchicalNode>>(new Map());
   const canvasRef = useRef<CanvasRef>(null);
 
   // Handle resizing and get dimensions
@@ -156,13 +227,13 @@ export function HierarchicalMindMapDisplay() {
   }, []);
 
   // Memoize the converted nodes and edges
-  const { convertedNodes, convertedEdges } = useMemo(() => {
+  const { convertedNodes, convertedEdges, convertedNodeMapping } = useMemo(() => {
     if (!currentMindMap?.hierarchical_data) {
-      return { convertedNodes: [], convertedEdges: [] };
+      return { convertedNodes: [], convertedEdges: [], convertedNodeMapping: new Map() };
     }
 
     try {
-      const { nodes: reaflowNodes, edges: reaflowEdges } = convertHierarchyToReaflow(
+      const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping } = convertHierarchyToReaflow(
         currentMindMap.hierarchical_data
       );
 
@@ -170,13 +241,14 @@ export function HierarchicalMindMapDisplay() {
         nodes: reaflowNodes.length,
         edges: reaflowEdges.length,
         nodesSample: reaflowNodes.slice(0, 3),
-        edgesSample: reaflowEdges.slice(0, 3)
+        edgesSample: reaflowEdges.slice(0, 3),
+        mappingSize: nodeMapping.size
       });
 
-      return { convertedNodes: reaflowNodes, convertedEdges: reaflowEdges };
+      return { convertedNodes: reaflowNodes, convertedEdges: reaflowEdges, convertedNodeMapping: nodeMapping };
     } catch (error) {
       console.error('HierarchicalMindMapDisplay: Error converting hierarchy:', error);
-      return { convertedNodes: [], convertedEdges: [] };
+      return { convertedNodes: [], convertedEdges: [], convertedNodeMapping: new Map() };
     }
   }, [currentMindMap?.hierarchical_data]);
 
@@ -184,24 +256,29 @@ export function HierarchicalMindMapDisplay() {
   useEffect(() => {
     setNodes(convertedNodes);
     setEdges(convertedEdges);
+    setNodeMapping(convertedNodeMapping);
 
     // Debug logging
     console.log('HierarchicalMindMapDisplay: State updated', {
       nodesCount: convertedNodes.length,
       edgesCount: convertedEdges.length,
+      mappingSize: convertedNodeMapping.size,
+      mappingKeys: Array.from(convertedNodeMapping.keys()),
+      sampleNodes: convertedNodes.slice(0, 5).map(n => ({ id: n.id, text: n.text })),
       dimensions,
       hasCurrentMindMap: !!currentMindMap
     });
-  }, [convertedNodes, convertedEdges, dimensions, currentMindMap]);
+  }, [convertedNodes, convertedEdges, convertedNodeMapping, dimensions, currentMindMap]);
 
   const handleReset = useCallback(() => {
     if (currentMindMap?.hierarchical_data) {
       console.log('HierarchicalMindMapDisplay: Resetting view');
-      const { nodes: reaflowNodes, edges: reaflowEdges } = convertHierarchyToReaflow(
+      const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping: newNodeMapping } = convertHierarchyToReaflow(
         currentMindMap.hierarchical_data
       );
       setNodes(reaflowNodes);
       setEdges(reaflowEdges);
+      setNodeMapping(newNodeMapping);
 
       // Force a re-fit and center after a small delay
       setTimeout(() => {
@@ -337,6 +414,7 @@ export function HierarchicalMindMapDisplay() {
           node={(nodeProps) => (
             <CustomNode
               {...nodeProps}
+              nodeMapping={nodeMapping}
               text={nodes.find(n => n.id === nodeProps.id)?.text || 'Node'}
             />
           )}

@@ -38,7 +38,7 @@ export default function MapPage() {
     setCurrentMindMap,
     isAuthenticated,
     jwt,
-    setSelectedNode,
+    setSelectedNodeData,
     setDetailPanelOpen
   } = useAppStore();
 
@@ -115,7 +115,7 @@ export default function MapPage() {
   const handleGoHome = () => {
     // Clear current mind map and navigate home
     setCurrentMindMap(null);
-    setSelectedNode(null);
+    setSelectedNodeData(null);
     setDetailPanelOpen(false);
     router.push('/');
   };
