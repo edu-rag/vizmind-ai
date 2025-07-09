@@ -5,13 +5,13 @@ import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import {
-  Loader2,
-  Shield,
-  CheckCircle2,
-  Lock,
-  Zap,
-  Globe
+import { 
+  Loader2, 
+  Shield, 
+  CheckCircle2, 
+  Lock, 
+  Globe,
+  Sparkles
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { authenticateWithGoogle } from '@/lib/api';
@@ -94,7 +94,7 @@ export function AuthDialog({ open, onOpenChange, onSuccess }: AuthDialogProps) {
               <div className="grid gap-3">
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                    <Zap className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <Sparkles className="h-4 w-4 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="flex-1">
                     <p className="text-responsive-sm font-medium text-foreground">AI-Powered Analysis</p>

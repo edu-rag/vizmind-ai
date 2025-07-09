@@ -25,7 +25,7 @@
     "@radix-ui/react-menubar": "^1.1.1",
     "@radix-ui/react-navigation-menu": "^1.2.0",
     "@radix-ui/react-popover": "^1.1.1",
-    "@radix-ui/react-progress": "^1.1.0",
+    "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-radio-group": "^1.2.0",
     "@radix-ui/react-scroll-area": "^1.1.0",
     "@radix-ui/react-select": "^2.1.1",
@@ -72,5 +72,8 @@
     "vaul": "^0.9.9",
     "zod": "^3.23.8",
     "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@types/d3-chord": "^3.0.6"
   }
 }
