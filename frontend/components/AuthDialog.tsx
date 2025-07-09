@@ -5,11 +5,11 @@ import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { 
-  Loader2, 
-  Shield, 
-  CheckCircle2, 
-  Lock, 
+import {
+  Loader2,
+  Shield,
+  CheckCircle2,
+  Lock,
   Globe,
   Sparkles
 } from 'lucide-react';
