@@ -160,10 +160,11 @@ graph TD
 
 ---
 
-## 2. Class Diagram (Mermaid)
+## 2. Class Diagram
 
 **Deskripsi:** Class Diagram ini menyajikan komponen-komponen utama dalam sistem CMVS. Diagram ini menampilkan entitas kunci di frontend dan backend serta relasi dasarnya untuk memberikan gambaran struktur sistem secara umum.
 
+### 2.1 Class Diagram (Mermaid)
 ```mermaid
 classDiagram
     class Frontend {
@@ -202,6 +203,63 @@ classDiagram
     Frontend "1" -- "1" Backend : API Communication
     Backend "1" -- "1" AIEngine : Menggunakan
     Backend "1" -- "1" Database : Akses Data
+```
+
+### 2.2 Class Diagram (PlantUML)
+```plantuml
+@startuml
+!theme plain
+skinparam classAttributeIconSize 0
+
+class Frontend {
+    +ConceptMapDisplay
+    +NodeDetailPanel
+    +FileUploadZone
+    +HistorySidebar
+    +AuthProvider
+    --
+    +handleUserInteraction()
+}
+
+class Backend {
+    +AuthService
+    +DocumentService
+    +ConceptMapService
+    +ChatService
+    --
+    +processRequest()
+}
+
+class AIEngine {
+    +extractTextFromPDF()
+    +generateConceptMap()
+    +answerQuestion()
+    +processRAG()
+}
+
+class Database {
+    +Users
+    +Documents
+    +ConceptMaps
+    +ChatHistory
+    --
+    +saveData()
+    +retrieveData()
+}
+
+class CloudflareR2 {
+    +uploadFile()
+    +downloadFile()
+    +deleteFile()
+    +generatePresignedUrl()
+}
+
+Frontend -- Backend : API Communication
+Backend -- AIEngine : uses
+Backend -- Database : accesses
+Backend -- CloudflareR2 : stores/retrieves files
+
+@enduml
 ```
 
 ---
