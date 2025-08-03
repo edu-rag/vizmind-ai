@@ -5,6 +5,8 @@
   # The command to build your Next.js site.
   # Netlify will run this command from the 'base' directory.
   command = "pnpm run build"
+  publish = ".next"
+  base = "frontend"
 
 [[plugins]]
   # This is the essential plugin for deploying Next.js sites on Netlify.
