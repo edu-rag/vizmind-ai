@@ -1,11 +1,12 @@
-[build]
-  base = "."
-  command = "pnpm run build"
-  publish = ".next"
+# This file is placed at the root of your repository.
+# It tells Netlify how to build and deploy your site.
 
-[dev]
-  command = "pnpm run dev"
-  port = 3000
+[build]
+  # The command to build your Next.js site.
+  # Netlify will run this command from the 'base' directory.
+  command = "pnpm run build"
 
 [[plugins]]
-  package = "@netlify/plugin-nextjs@appdir"
+  # This is the essential plugin for deploying Next.js sites on Netlify.
+  # It ensures that features like SSR, ISR, and Image Optimization work correctly.
+  package = "@netlify/plugin-nextjs"

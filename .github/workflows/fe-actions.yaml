@@ -46,7 +46,7 @@ jobs:
         working-directory: frontend
 
       - name: Install Netlify CLI and Plugin
-        run: npm install -g netlify-cli @netlify/plugin-nextjs@appdir
+        run: npm install -g netlify-cli @netlify/plugin-nextjs
 
       - name: 📦 Build project
         run: pnpm run build
