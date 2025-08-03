@@ -1,0 +1,60 @@
+name: Frontend Deploy
+
+on:
+  push:
+    branches: [main, stg]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/fe-actions.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/fe-actions.yaml"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Cache node modules and next folder
+      - name: 📬 Caching
+        uses: actions/cache@v3
+        with:
+          path: |
+            frontend/node_modules
+            frontend/.next/cache
+          key: ${{ runner.os }}-modules-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 🧰 Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Install Netlify CLI and Plugin
+        run: npm install -g netlify-cli @netlify/plugin-nextjs@appdir
+
+      - name: 📦 Build project
+        run: pnpm run build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+
+      # Deploy to Netlify with a personalized message
+      - name: 🚀 Deploy to Netlify
+        run: netlify deploy --site ${{ secrets.NETLIFY_SITE_ID }} --auth ${{ secrets.NETLIFY_API_TOKEN }} --dir=frontend/.next --prod --message "Deploy - GitHub Actions"

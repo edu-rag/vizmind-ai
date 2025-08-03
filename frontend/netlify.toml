@@ -1,0 +1,11 @@
+[build]
+  base = "."
+  command = "pnpm run build"
+  publish = ".next"
+
+[dev]
+  command = "pnpm run dev"
+  port = 3000
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs@appdir"
