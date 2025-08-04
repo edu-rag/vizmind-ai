@@ -77,3 +77,8 @@ app.include_router(api_router_v1, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Secure CMVS API (JWT Auth)!"}
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "API is running"}
