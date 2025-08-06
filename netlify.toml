@@ -8,6 +8,11 @@
   publish = ".next"
   base = "frontend"
 
+[build.environment]
+  # These will be available during build time
+  NEXT_PUBLIC_API_BASE_URL = ""
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID = ""
+
 [[plugins]]
   # This is the essential plugin for deploying Next.js sites on Netlify.
   # It ensures that features like SSR, ISR, and Image Optimization work correctly.
