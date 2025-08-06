@@ -57,7 +57,7 @@ jobs:
 
       # Deploy to Netlify with a personalized message
       - name: 🚀 Deploy to Netlify
-        run: netlify deploy --site ${{ secrets.NETLIFY_SITE_ID }} --auth ${{ secrets.NETLIFY_API_TOKEN }} --dir=frontend --prod --message "Deploy - GitHub Actions"
+        run: netlify deploy --site ${{ secrets.NETLIFY_SITE_ID }} --auth ${{ secrets.NETLIFY_API_TOKEN }} --dir=frontend/.next --prod --message "Deploy - GitHub Actions"
         env:
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
