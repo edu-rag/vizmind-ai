@@ -110,13 +110,18 @@ export function NodeDetailPanel() {
       mapId: currentMindMap?.mongodb_doc_id
     });
 
-    if (!currentMindMap || !jwt || !selectedNodeData || isLoadingRef.current) {
+    if (!currentMindMap || !jwt || !selectedNodeData) {
       console.log('❌ Early return from handleGetNodeDetails:', {
         missingCurrentMindMap: !currentMindMap,
         missingJwt: !jwt,
-        missingSelectedNodeData: !selectedNodeData,
-        isAlreadyLoading: isLoadingRef.current
+        missingSelectedNodeData: !selectedNodeData
       });
+      return;
+    }
+
+    // Prevent multiple concurrent calls
+    if (isLoadingRef.current) {
+      console.log('⏭️ Already loading, skipping duplicate call');
       return;
     }
 
@@ -177,17 +182,13 @@ export function NodeDetailPanel() {
     if (isDetailPanelOpen && selectedNodeData) {
       console.log('🔄 Reset effect triggered:', { selectedNodeId: selectedNodeData.id, currentNodeId });
 
-      // Only reset loading state, don't clear data unless switching nodes
+      // Only clear data when switching nodes, don't manage loading state here
       if (currentNodeId !== selectedNodeData.id) {
         console.log('🗑️ Clearing data for node switch from', currentNodeId, 'to', selectedNodeData.id);
         setInitialAnswer(null);
         setInitialCitedSources([]);
         setCurrentNodeId(selectedNodeData.id);
       }
-
-      // Always reset loading state
-      isLoadingRef.current = false;
-      setIsLoading(false);
     }
   }, [isDetailPanelOpen, selectedNodeData, currentNodeId]);
 
@@ -319,7 +320,9 @@ export function NodeDetailPanel() {
         setInitialCitedSources([]);
         setConversation([]);
         setQuestion('');
+        setCurrentNodeId(null);
         isLoadingRef.current = false;
+        setIsLoading(false);
       }, 300);
     } else {
       setDetailPanelOpen(true);
@@ -607,12 +610,12 @@ export function NodeDetailPanel() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      if (question.trim() && !isAsking) {
+                      if (question.trim() && !isAsking && !isLoading) {
                         handleSubmitQuestion(e as any);
                       }
                     }
                   }}
-                  disabled={isAsking}
+                  disabled={isAsking || isLoading}
                   className="form-mobile text-responsive-sm pr-12"
                   autoComplete="off"
                 />
@@ -621,7 +624,7 @@ export function NodeDetailPanel() {
                   size="icon"
                   variant="ghost"
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 hover:bg-muted"
-                  disabled={!question.trim() || isAsking}
+                  disabled={!question.trim() || isAsking || isLoading}
                 >
                   {isAsking ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
