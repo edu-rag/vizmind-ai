@@ -5,7 +5,28 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
-// Helper function to make authenticated requests
+// Function to handle logout when token is expired
+const handleTokenExpiration = () => {
+  // Import the store dynamically to avoid circular dependencies
+  import('@/lib/store').then(({ useAppStore }) => {
+    const { logout } = useAppStore.getState();
+    logout();
+
+    // Show a toast notification using sonner
+    if (typeof window !== 'undefined') {
+      import('sonner').then(({ toast }) => {
+        toast.error('Session expired. Please log in again.');
+      });
+    }
+
+    // Redirect to home page after a short delay
+    if (typeof window !== 'undefined') {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000); // 1 second delay to show the toast
+    }
+  });
+};// Helper function to make authenticated requests
 const makeRequest = async <T>(
   url: string,
   options: RequestInit = {},
@@ -26,6 +47,13 @@ const makeRequest = async <T>(
       ...options,
       headers,
     });
+
+    // Check for 401 Unauthorized response (token expired)
+    if (response.status === 401) {
+      console.warn('Token expired or invalid. Logging out user.');
+      handleTokenExpiration();
+      return { error: 'Authentication expired. Please log in again.' };
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -71,6 +99,13 @@ export const generateHierarchicalMindMap = async (file: File, jwt: string) => {
       },
       body: formData,
     });
+
+    // Check for 401 Unauthorized response (token expired)
+    if (response.status === 401) {
+      console.warn('Token expired or invalid during mind map generation. Logging out user.');
+      handleTokenExpiration();
+      return { error: 'Authentication expired. Please log in again.' };
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -156,7 +191,7 @@ export const askQuestion = async (
     search_performed: string;
   }>(`/api/v1/maps/ask`, {
     method: 'POST',
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       map_id: conceptMapId,
       question,
     }),

@@ -27,6 +27,7 @@ import { getHierarchicalMindMap } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useAuthCheck } from '@/hooks/use-auth-check';
 
 export default function MapPage() {
   const params = useParams();
@@ -45,6 +46,13 @@ export default function MapPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Enable automatic token expiration checking for map pages
+  useAuthCheck({
+    showExpirationWarning: true,
+    warningMinutes: 5,
+    autoLogout: true,
+  });
 
   useEffect(() => {
     const checkMobile = () => {

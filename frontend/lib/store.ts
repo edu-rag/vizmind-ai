@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { isTokenExpired } from '@/lib/utils';
 
 export interface User {
   id: string;
@@ -75,6 +76,7 @@ interface AppState {
   setLoading: (loading: boolean) => void;
   setUploadProgress: (progress: number) => void;
   logout: () => void;
+  checkTokenValidity: () => boolean;
 }
 
 export const useAppStore = create<AppState>()(
@@ -118,6 +120,28 @@ export const useAppStore = create<AppState>()(
         selectedNodeData: null,
         isDetailPanelOpen: false
       }),
+      checkTokenValidity: () => {
+        const state = get();
+        if (!state.jwt || !state.isAuthenticated) {
+          return false;
+        }
+
+        const isExpired = isTokenExpired(state.jwt);
+        if (isExpired) {
+          // Auto logout if token is expired
+          set({
+            user: null,
+            jwt: null,
+            isAuthenticated: false,
+            currentMindMap: null,
+            selectedNodeData: null,
+            isDetailPanelOpen: false
+          });
+          return false;
+        }
+
+        return true;
+      },
     }),
     {
       name: 'knowledge-platform-storage',
@@ -128,6 +152,12 @@ export const useAppStore = create<AppState>()(
         mapHistory: state.mapHistory,
         isSidebarCollapsed: state.isSidebarCollapsed,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Check token validity after hydration from localStorage
+        if (state) {
+          state.checkTokenValidity();
+        }
+      },
     }
   )
 );
