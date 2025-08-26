@@ -9,20 +9,11 @@ class UserBase(BaseModel):
     picture: Optional[HttpUrl] = None
 
 
-class UserCreate(UserBase):
-    google_id: str
-
-
-class UserUpdate(UserBase):
-    pass
-
-
 class UserModelInDB(UserBase):
-    id: str  # MongoDB ObjectId as string
+    id: str
     google_id: str
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
     class Config:
-        from_attributes = True  # Pydantic v2
-        # orm_mode = True # Pydantic v1
+        from_attributes = True

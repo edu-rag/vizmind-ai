@@ -1,5 +1,5 @@
 from app.db.mongodb_utils import get_users_collection, mongo_to_pydantic
-from app.models.user_models import UserModelInDB, UserCreate
+from app.models.user_models import UserModelInDB
 from typing import Optional
 import datetime
 from pymongo import ReturnDocument
