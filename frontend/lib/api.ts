@@ -64,7 +64,7 @@ export const generateHierarchicalMindMap = async (file: File, jwt: string) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/maps/generate-mindmap/`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/maps/generate-mindmap`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${jwt}`,
@@ -93,7 +93,7 @@ export const getMapHistory = async (jwt: string) => {
       original_filename: string;
       created_at: string;
     }>;
-  }>('/api/v1/maps/history/', {}, jwt);
+  }>('/api/v1/maps/history', {}, jwt);
 };
 
 // Get specific hierarchical mind map
@@ -133,7 +133,7 @@ export const getNodeDetails = async (
       snippet: string;
     }>;
     message: string;
-  }>(`/api/v1/maps/details/?${params.toString()}`, {}, jwt);
+  }>(`/api/v1/maps/details?${params.toString()}`, {}, jwt);
 };
 
 // Ask question about concept
@@ -143,14 +143,6 @@ export const askQuestion = async (
   jwt: string,
   contextNodeLabel?: string
 ) => {
-  const params = new URLSearchParams({
-    concept_map_id: conceptMapId,
-    question,
-  });
-
-  if (contextNodeLabel) {
-    params.append('context_node_label', contextNodeLabel);
-  }
 
   return makeRequest<{
     query: string;
@@ -162,5 +154,11 @@ export const askQuestion = async (
       snippet: string;
     }>;
     search_performed: string;
-  }>(`/api/v1/maps/ask/?${params.toString()}`, {}, jwt);
+  }>(`/api/v1/maps/ask`, {
+    method: 'POST',
+    body: JSON.stringify({ 
+      map_id: conceptMapId,
+      question,
+    }),
+  }, jwt);
 };
