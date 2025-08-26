@@ -171,6 +171,20 @@ export function NodeDetailPanel() {
     }
   }, [isDetailPanelOpen, selectedNodeData, currentNodeId]);
 
+  // Clear all data when selectedNodeData becomes null (e.g., when no node is selected)
+  useEffect(() => {
+    if (!selectedNodeData) {
+      console.log('🗑️ Clearing all data because no node is selected');
+      setInitialAnswer(null);
+      setInitialCitedSources([]);
+      setLastQuestionAnswer(null);
+      setQuestion('');
+      setCurrentNodeId(null);
+      isLoadingRef.current = false;
+      setIsLoading(false);
+    }
+  }, [selectedNodeData]);
+
   // Function to clear conversation history
   const handleClearConversation = useCallback(async () => {
     if (!currentMindMap || !jwt || !selectedNodeData) return;
@@ -276,13 +290,9 @@ export function NodeDetailPanel() {
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
       setDetailPanelOpen(false);
-      // Reset state when closing
+      // Only reset question input when closing, preserve node data for reopening
       setTimeout(() => {
-        setInitialAnswer(null);
-        setInitialCitedSources([]);
-        setLastQuestionAnswer(null);
         setQuestion('');
-        setCurrentNodeId(null);
         isLoadingRef.current = false;
         setIsLoading(false);
       }, 300);
