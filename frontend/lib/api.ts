@@ -208,33 +208,33 @@ export const getHierarchicalMindMap = async (mapId: string, jwt: string) => {
   }>(`/api/v1/maps/${mapId}`, {}, jwt);
 };
 
-// Get node details using VizMind AI RAG
-export const getNodeDetails = async (
-  mapId: string,
-  nodeQuery: string,
-  topK: number = 10,
-  jwt: string
-): Promise<ApiResponse<NodeDetailResponse>> => {
-  const params = new URLSearchParams({
-    node_query: nodeQuery,
-    top_k: topK.toString(),
-  });
 
-  return makeRequest<NodeDetailResponse>(`/api/v1/maps/${mapId}/details?${params.toString()}`, {}, jwt);
+export const deleteChatHistory = async (
+  mapId: string,
+  nodeId: string,
+  jwt: string
+) => {
+  return makeRequest<{ success: boolean; message: string }>(`/api/v1/chat/delete/${mapId}/${nodeId}`, {
+    method: 'DELETE',
+  }, jwt);
 };
 
-// Ask question about concept using VizMind AI
-export const askQuestion = async (
-  conceptMapId: string,
+export const askQuestionWithHistory = async (
+  mapId: string,
   question: string,
   jwt: string,
-  contextNodeLabel?: string
+  nodeId?: string,
+  nodeLabel?: string,
+  topK: number = 5
 ) => {
-  return makeRequest<NodeDetailResponse>(`/api/v1/maps/ask`, {
+  return makeRequest<NodeDetailResponse>(`/api/v1/chat`, {
     method: 'POST',
     body: JSON.stringify({
-      map_id: conceptMapId,
-      question,
+      map_id: mapId,
+      question: question,
+      node_id: nodeId,
+      node_label: nodeLabel,
+      top_k: topK,
     }),
   }, jwt);
 };

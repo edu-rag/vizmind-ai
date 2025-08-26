@@ -58,17 +58,6 @@ class NodeDetailResponse(BaseModel):
     message: Optional[str] = None
 
 
-# --- Workflow Status Models ---
-class ProcessingStatus(BaseModel):
-    """Status information for document processing workflows."""
-
-    stage: str
-    progress_percentage: Optional[int] = None
-    current_step: Optional[str] = None
-    estimated_completion_time: Optional[str] = None
-    error_message: Optional[str] = None
-
-
 class WorkflowMetrics(BaseModel):
     """Metrics for completed workflows."""
 

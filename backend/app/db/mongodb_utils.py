@@ -39,16 +39,23 @@ def get_users_collection():
     return users_coll
 
 
-def get_cmvs_collection():
+def get_chat_collection():
     db = get_db()
-    return db[settings.MONGODB_MAPS_COLLECTION]
-
-
-def get_chunk_embeddings_collection():
-    db = get_db()
-    # Add index for embeddings if planning vector search (MongoDB Atlas specific)
-    # Example: chunks_coll.create_index([("embedding", "vector")], name="vector_index", ...)
-    return db[settings.MONGODB_CHUNKS_COLLECTION]
+    chat_coll = db["chat_conversations"]
+    # Ensure indexes for chat queries
+    chat_coll.create_index(
+        [
+            ("user_id", pymongo.ASCENDING),
+            ("map_id", pymongo.ASCENDING),
+            ("node_id", pymongo.ASCENDING),
+        ],
+        unique=True,
+        background=True,
+    )
+    chat_coll.create_index([("user_id", pymongo.ASCENDING)], background=True)
+    chat_coll.create_index([("updated_at", pymongo.DESCENDING)], background=True)
+    chat_coll.create_index([("is_deleted", pymongo.ASCENDING)], background=True)
+    return chat_coll
 
 
 def mongo_to_pydantic(doc: Dict[str, Any], model_class):

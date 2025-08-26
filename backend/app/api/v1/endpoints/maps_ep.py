@@ -1,20 +1,15 @@
-from datetime import datetime, timezone
 from fastapi import (
     APIRouter,
     File,
     UploadFile,
     HTTPException,
     Depends,
-    Query,
-    Body,
 )
 import uuid
 
 from app.core.config import logger, settings
 from app.models.user_models import UserModelInDB
 from app.models.cmvs_models import (
-    HierarchicalNode,
-    NodeDetailResponse,
     MindMapResponse,
 )
 from app.api.v1.deps import get_current_active_user
@@ -100,17 +95,6 @@ async def generate_mindmap_endpoint(
             detail=f"An unexpected error occurred during mind map generation: {str(e)}",
         )
 
-        return MindMapResponse(
-            attachment={
-                "filename": file.filename,
-                "s3_path": s3_file_path,
-                "status": "success",
-            },
-            status="success",
-            hierarchical_data=hierarchical_node,
-            mongodb_doc_id=map_id,
-        )
-
     except Exception as e:
         logger.error(f"Error in generate_mindmap_endpoint: {e}", exc_info=True)
         raise HTTPException(
@@ -169,55 +153,6 @@ async def get_map_history_endpoint(
         raise HTTPException(status_code=500, detail="Database error occurred")
 
 
-@router.get(
-    "/{map_id}/details", response_model=NodeDetailResponse, tags=["VizMind AI RAG"]
-)
-async def get_node_details_endpoint(
-    map_id: str,
-    node_query: str = Query(..., description="Query about a specific node or concept"),
-    top_k: int = Query(10, description="Number of relevant chunks to retrieve"),
-    current_user: UserModelInDB = Depends(get_current_active_user),
-):
-    """
-    Get detailed information about a specific node or concept in a mind map using VizMind AI RAG.
-    """
-    try:
-        # Validate ObjectId format
-        if not ObjectId.is_valid(map_id):
-            raise HTTPException(status_code=400, detail="Invalid map ID format")
-
-        # Verify the mind map exists and belongs to the user
-        db = get_db()
-        cm_collection = db[settings.MONGODB_MAPS_COLLECTION]
-        map_doc = cm_collection.find_one(
-            {"_id": ObjectId(map_id), "user_id": current_user.id}
-        )
-
-        if not map_doc:
-            raise HTTPException(status_code=404, detail="Mind map not found")
-
-        logger.info(
-            f"User '{current_user.email}' querying node: '{node_query}' for VizMind AI map: {map_id}"
-        )
-
-        # Use VizMind AI service for RAG
-        vizmind_service = VizMindAIService()
-        response = await vizmind_service.query_mind_map(
-            user_id=current_user.id,
-            map_id=map_id,
-            query=node_query,
-            top_k=top_k,
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in get_node_details_endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error occurred.")
-
-
 @router.get("/{map_id}", tags=["VizMind AI Mind Maps"])
 async def get_mind_map_endpoint(
     map_id: str,
@@ -256,51 +191,3 @@ async def get_mind_map_endpoint(
     except Exception as e:
         logger.error(f"Database error retrieving map {map_id}: {e}")
         raise HTTPException(status_code=500, detail="Database error occurred")
-
-
-@router.post("/ask", response_model=NodeDetailResponse, tags=["VizMind AI RAG"])
-async def ask_question_endpoint(
-    current_user: UserModelInDB = Depends(get_current_active_user),
-    question: str = Body(..., description="The user's question"),
-    map_id: str = Body(..., description="MongoDB document ID of the mind map"),
-    top_k: int = Body(10, description="Number of relevant chunks to retrieve"),
-):
-    """
-    Answers a specific question related to a concept within a given mind map,
-    using VizMind AI RAG pipeline.
-    """
-    if not question:
-        raise HTTPException(status_code=400, detail="A question is required.")
-
-    logger.info(f"User '{current_user.email}' asking VizMind AI: '{question[:100]}...'")
-
-    try:
-        # Validate ObjectId format
-        if not ObjectId.is_valid(map_id):
-            raise HTTPException(status_code=400, detail="Invalid map ID format")
-
-        # Verify the mind map exists and belongs to the user
-        db = get_db()
-        cm_collection = db[settings.MONGODB_MAPS_COLLECTION]
-        map_doc = cm_collection.find_one(
-            {"_id": ObjectId(map_id), "user_id": current_user.id}
-        )
-
-        if not map_doc:
-            raise HTTPException(status_code=404, detail="Mind map not found")
-
-        # Use VizMind AI service for RAG
-        vizmind_service = VizMindAIService()
-        response = await vizmind_service.query_mind_map(
-            user_id=current_user.id, map_id=map_id, query=question, top_k=top_k
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"API Error in ask_question_endpoint: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"An internal server error occurred: {e}"
-        )
