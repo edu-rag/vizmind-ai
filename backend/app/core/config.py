@@ -9,7 +9,7 @@ load_dotenv()
 class Settings(BaseSettings):
     # LLM & Embeddings
     GROQ_API_KEY: str
-    MODEL_NAME_FOR_EMBEDDING: str = "paraphrase-multilingual-mpnet-base-v2"
+    MODEL_NAME_FOR_EMBEDDING: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     LLM_MODEL_NAME_GROQ: str = "llama-3.3-70b-versatile"
 
     # Langsmith
