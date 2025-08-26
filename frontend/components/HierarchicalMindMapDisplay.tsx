@@ -5,7 +5,7 @@ import { Canvas, Node as ReaflowNode, Edge as ReaflowEdge, NodeData, EdgeData, C
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
-import { Maximize2, Minimize2, RotateCcw } from 'lucide-react';
+import { Maximize2, Minimize2, RotateCcw, ZoomIn } from 'lucide-react';
 
 // Types for the hierarchical data structure
 interface HierarchicalNode {
@@ -185,6 +185,7 @@ export function HierarchicalMindMapDisplay() {
   const [isMobile, setIsMobile] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [nodeMapping, setNodeMapping] = useState<Map<string, HierarchicalNode>>(new Map());
+  const [shouldFit, setShouldFit] = useState(false); // New state for temporary fit mode
   const canvasRef = useRef<CanvasRef>(null);
 
   // Handle resizing and get dimensions
@@ -193,9 +194,10 @@ export function HierarchicalMindMapDisplay() {
       const container = document.querySelector('#mind-map-container');
       if (container) {
         const rect = container.getBoundingClientRect();
+        // Add padding to canvas dimensions to allow for better panning and scrolling
         setDimensions({
-          width: rect.width || 800,
-          height: rect.height || 600
+          width: (rect.width || 800) + 400, // Add 200px padding on each side
+          height: (rect.height || 600) + 400 // Add 200px padding on top and bottom
         });
       }
       setIsMobile(window.innerWidth < 768);
@@ -215,9 +217,10 @@ export function HierarchicalMindMapDisplay() {
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
+        // Add padding to canvas dimensions to allow for better panning and scrolling
         setDimensions({
-          width: width || 800,
-          height: height || 600
+          width: (width || 800) + 400, // Add 200px padding on each side
+          height: (height || 600) + 400 // Add 200px padding on top and bottom
         });
       }
     });
@@ -280,12 +283,20 @@ export function HierarchicalMindMapDisplay() {
       setEdges(reaflowEdges);
       setNodeMapping(newNodeMapping);
 
-      // Force a re-fit and center after a small delay
+      // Force a re-render and layout update after a small delay
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 200);
     }
   }, [currentMindMap]);
+
+  const handleFitToView = useCallback(() => {
+    // Temporarily enable fit mode to trigger a fit-to-view
+    setShouldFit(true);
+    setTimeout(() => {
+      setShouldFit(false);
+    }, 100);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(!isFullscreen);
@@ -329,7 +340,8 @@ export function HierarchicalMindMapDisplay() {
     <div
       id="mind-map-container"
       className={cn(
-        'w-full h-full bg-background border border-border rounded-lg overflow-hidden relative min-h-0 min-w-0',
+        'w-full h-full bg-background border border-border rounded-lg relative min-h-0 min-w-0',
+        'overflow-hidden', // Ensure proper clipping
         isFullscreen && 'fixed inset-0 z-50 rounded-none'
       )}
       style={{ width: '100%', height: '100%' }}
@@ -389,26 +401,27 @@ export function HierarchicalMindMapDisplay() {
 
         <Canvas
           ref={canvasRef}
-          key={`${nodes.length}-${edges.length}-${dimensions.width}-${dimensions.height}`}
+          key={`${nodes.length}-${edges.length}-${dimensions.width}-${dimensions.height}-${shouldFit}`}
           nodes={nodes}
           edges={edges}
           direction="DOWN"
           layoutOptions={{
             'elk.algorithm': 'layered',
             'elk.direction': 'DOWN',
-            'elk.spacing.nodeNode': '40',
-            'elk.layered.spacing.nodeNodeBetweenLayers': '60',
-            'elk.spacing.edgeNode': '20',
+            'elk.spacing.nodeNode': '50',
+            'elk.layered.spacing.nodeNodeBetweenLayers': '80',
+            'elk.spacing.edgeNode': '30',
             'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
             'elk.alignment': 'CENTER',
             'elk.contentAlignment': 'CENTER',
+            'elk.padding': '[top=100,left=100,bottom=100,right=100]', // Add padding around the layout
           }}
           pannable={true}
           zoomable={true}
           animated={false}
-          fit={true}
-          maxZoom={3}
-          minZoom={0.1}
+          fit={shouldFit} // Use the temporary fit state
+          maxZoom={5}
+          minZoom={0.05} // Allow much more zoom out
           width={dimensions.width}
           height={dimensions.height}
           node={(nodeProps) => (
