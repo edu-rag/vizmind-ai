@@ -1,53 +1,275 @@
-# AI-Powered Concept Map Visual Synthesizer (CMVS) & RAG Q&A API
+# VizMind AI - Intelligent Document Mind Mapping
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.4+-orange.svg)](https://langchain-ai.github.io/langgraph/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.5+-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green.svg)](https://mongodb.com)
 
-This project provides a powerful FastAPI backend to automatically transform PDF documents into interactive concept maps and enables users to ask contextual questions about the content using a Retrieval Augmented Generation (RAG) pipeline. It features secure authentication via Google Sign-In with JWT, data storage on MongoDB Atlas (including vector embeddings for semantic search), and PDF storage on S3-compatible services.
+VizMind AI is a powerful FastAPI backend that automatically transforms PDF documents into interactive hierarchical mind maps and enables intelligent question-answering through a sophisticated Retrieval Augmented Generation (RAG) pipeline. Built with modern LangGraph workflows, secure authentication, and cloud-ready architecture.
 
-## Features
+## 🚀 Features
 
-* **PDF to Concept Map**: Upload PDF documents to generate a high-level concept map focusing on main ideas.
-* **S3 Integration**: Original PDF documents are securely stored in an S3-compatible bucket.
-* **MongoDB Atlas Integration**:
-    * Stores user profiles.
-    * Saves generated concept map data (triples, Mermaid code, S3 paths).
-    * Stores chunked text from PDFs along with their vector embeddings for semantic search.
-* **RAG Q&A Pipeline**:
-    * Ask questions about concepts within a generated map.
-    * Retrieves relevant context from stored document chunks using MongoDB Atlas Vector Search.
-    * Intelligent grading of retrieved context by an LLM.
-    * LLM-generated answers with cited sources.
-* **LangGraph Orchestration**: Complex workflows for CMVS generation and RAG Q&A are managed using LangGraph.
-* **Secure Authentication**:
-    * Google Sign-In for user authentication.
-    * JWT (JSON Web Tokens) for securing API endpoints.
-* **LLM Powered**: Utilizes LLMs (via Groq for speed) for concept extraction, grading, and answer generation.
-* **Structured API**: Built with FastAPI, providing interactive API documentation (Swagger UI).
-* **Modular Codebase**: Organized into a structured package for better maintainability and scalability.
+* **🧠 AI-Powered Mind Mapping**: Transform PDFs into structured hierarchical mind maps using advanced LLM processing
+* **📚 Intelligent RAG Q&A**: Ask questions about your documents with context-aware AI responses and source citations
+* **🔄 LangGraph Workflows**: Robust, scalable processing pipelines with automatic error handling and retry mechanisms
+* **☁️ Cloud-Ready**: S3 integration for document storage and MongoDB Atlas for vector search
+* **🔐 Secure Authentication**: Google Sign-In with JWT tokens for secure API access
+* **⚡ High Performance**: Groq LLM integration for fast inference and Docling for superior document processing
+* **📊 Processing Analytics**: Detailed metrics and status tracking for all workflows
+* **🎯 Smart Chunking**: Heading-aware document chunking for better context preservation
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
-The application is built around a FastAPI backend with several key components:
+VizMind AI is built around a modern, microservices-oriented architecture:
 
-* **API Layer**: Exposes RESTful endpoints for authentication, concept map generation, and Q&A.
-* **Service Layer**: Contains the business logic for user management, PDF processing, S3 interaction, and orchestrating the LangGraph pipelines.
-* **LangGraph Pipelines**:
-    1.  **CMVS Pipeline**: Handles PDF text extraction, chunking, embedding, main idea concept map generation (triples), Mermaid diagram code generation, and storage.
-    2.  **RAG Q&A Pipeline**: Manages retrieval of relevant chunks from MongoDB Atlas, LLM-based grading of context, conditional web search fallback, and final answer generation with citations.
-* **Data Stores**:
-    * **MongoDB Atlas**: Stores user data, concept map metadata, and text chunks with their vector embeddings (leveraging Atlas Vector Search).
-    * **S3-compatible storage**: Stores original uploaded PDF files.
-* **External Services**:
-    * **Google OAuth**: For user sign-in.
-    * **Groq API**: For fast LLM inference.
-    * **HuggingFace Embedding Models**: For generating text embeddings.
+### Core Components
 
-## Application Flow Diagrams (Mermaid)
+* **🎯 API Layer**: RESTful FastAPI endpoints with comprehensive documentation
+* **🧠 LangGraph Workflows**: Orchestrated AI processing pipelines
+* **📊 Service Layer**: Business logic for document processing, user management, and AI operations
+* **💾 Data Stores**: MongoDB Atlas with vector search and S3-compatible storage
+* **🔧 External Services**: Google OAuth, Groq API, HuggingFace embeddings
 
-### 1. High-Level System Overview
+### LangGraph Workflows
+
+#### 1. **Document Processing Workflow**
+```
+Upload → Docling Extract → LLM Clean → Mind Map Generate → Chunk Content → Embed & Store → Complete
+```
+
+#### 2. **RAG Query Workflow**
+```
+Query → Retrieve Documents → Grade Relevance → Generate Answer → Cite Sources → Complete
+```
+
+## 🔄 Application Flow
+
+### Document Processing Pipeline
+```mermaid
+graph TD
+    A[PDF Upload] --> B[S3 Storage]
+    B --> C[Docling Extraction]
+    C --> D[LLM Content Cleaning]
+    D --> E[Hierarchical Mind Map Generation]
+    E --> F[Heading-Based Chunking]
+    F --> G[Vector Embedding]
+    G --> H[MongoDB Storage]
+    H --> I[Complete]
+    
+    style A fill:#e1f5fe
+    style I fill:#c8e6c9
+```
+
+### RAG Query Pipeline
+```mermaid
+graph TD
+    A[User Query] --> B[Vector Search]
+    B --> C[Document Retrieval]
+    C --> D[Relevance Grading]
+    D --> E[Context Filtering]
+    E --> F[Answer Generation]
+    F --> G[Source Citation]
+    G --> H[Response]
+    
+    style A fill:#e1f5fe
+    style H fill:#c8e6c9
+```
+
+## 📋 Requirements
+
+- **Python**: 3.12+
+- **MongoDB Atlas**: Vector search enabled
+- **S3-Compatible Storage**: AWS S3, MinIO, etc.
+- **Groq API**: For LLM inference
+- **Google OAuth**: For authentication
+
+## 🚀 Quick Start
+
+### 1. Clone and Setup
+
+```bash
+git clone <repository-url>
+cd cmvs/backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. Environment Configuration
+
+Create a `.env` file:
+
+```env
+# LLM & AI
+GROQ_API_KEY=your_groq_api_key
+MODEL_NAME_FOR_EMBEDDING=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+LLM_MODEL_NAME_GROQ=llama-3.3-70b-versatile
+
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
+MONGODB_DATABASE_NAME=vizmind_ai
+MONGODB_ATLAS_VECTOR_SEARCH_INDEX_NAME=vector_index_on_embedding
+
+# S3 Storage
+S3_ACCESS_KEY_ID=your_s3_key
+S3_SECRET_ACCESS_KEY=your_s3_secret
+S3_ENDPOINT_URL=https://s3.amazonaws.com
+S3_BUCKET_NAME=your_bucket
+S3_PUBLIC_DOMAIN=https://your-bucket.s3.amazonaws.com
+
+# Authentication
+JWT_SECRET_KEY=your_jwt_secret_key
+GOOGLE_CLIENT_ID=your_google_client_id
+
+# Optional: Workflow Configuration
+WORKFLOW_MAX_RETRIES=3
+WORKFLOW_TIMEOUT_SECONDS=300
+DEFAULT_TOP_K=10
+```
+
+### 3. MongoDB Vector Index Setup
+
+Create a vector search index in MongoDB Atlas:
+
+```json
+{
+  "fields": [
+    {
+      "numDimensions": 768,
+      "path": "embedding",
+      "similarity": "cosine",
+      "type": "vector"
+    },
+    {
+      "path": "user_id",
+      "type": "filter"
+    },
+    {
+      "path": "map_id",
+      "type": "filter"
+    }
+  ]
+}
+```
+
+### 4. Run the Application
+
+```bash
+# Development
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Production
+python uvicorn_runner.py
+```
+
+## 📖 API Documentation
+
+Once running, access the interactive API documentation:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+### Key Endpoints
+
+#### Mind Map Generation
+```http
+POST /api/v1/maps/generate-mindmap
+Content-Type: multipart/form-data
+Authorization: Bearer <jwt_token>
+
+file: <PDF file>
+```
+
+#### Ask Questions
+```http
+POST /api/v1/maps/ask
+Content-Type: application/json
+Authorization: Bearer <jwt_token>
+
+{
+  "question": "What is the main concept discussed in chapter 2?",
+  "map_id": "507f1f77bcf86cd799439011",
+  "top_k": 10
+}
+```
+
+## 🔧 Advanced Configuration
+
+### LangGraph Workflow Customization
+
+The workflows can be customized through environment variables:
+
+```env
+# Workflow behavior
+WORKFLOW_MAX_RETRIES=3
+WORKFLOW_TIMEOUT_SECONDS=300
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+RELEVANCE_THRESHOLD=0.7
+
+# Performance tuning
+DEFAULT_TOP_K=10
+```
+
+### Custom LLM Models
+
+Modify the LLM configuration in `app/core/config.py`:
+
+```python
+LLM_MODEL_NAME_GROQ: str = "llama-3.3-70b-versatile"  # or other Groq models
+```
+
+## 🐳 Docker Deployment
+
+```bash
+# Build
+docker build -t vizmind-ai .
+
+# Run
+docker run -p 8000:8000 --env-file .env vizmind-ai
+```
+
+## 📊 Monitoring and Analytics
+
+VizMind AI provides comprehensive workflow metrics:
+
+- **Processing Time**: Track document processing duration
+- **Chunk Statistics**: Monitor chunking and embedding performance
+- **Query Performance**: RAG retrieval and generation metrics
+- **Error Tracking**: Detailed error logging and retry statistics
+
+Access metrics through the `/api/v1/maps/history` endpoint.
+
+## 🔒 Security Features
+
+- **JWT Authentication**: Secure token-based authentication
+- **Google OAuth**: Trusted identity provider integration
+- **User Isolation**: Multi-tenant data separation
+- **Input Validation**: Comprehensive request validation
+- **Rate Limiting**: Protection against abuse (configurable)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **LangChain & LangGraph**: For the powerful workflow orchestration
+- **Docling**: For superior PDF processing capabilities
+- **Groq**: For fast LLM inference
+- **MongoDB Atlas**: For vector search capabilities
+- **FastAPI**: For the robust web framework
+
+---
+
+**VizMind AI** - Transforming documents into intelligent, interactive mind maps. 🧠✨
 
 ```mermaid
 graph LR

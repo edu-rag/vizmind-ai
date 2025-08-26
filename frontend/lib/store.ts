@@ -24,8 +24,6 @@ export interface MapHistoryItem {
   attachments?: AttachmentInfo[];
 }
 
-// Legacy ReactFlow interfaces removed - using only hierarchical mind maps
-
 export interface HierarchicalNode {
   id: string;
   data: { label: string };
@@ -37,6 +35,12 @@ export interface HierarchicalMindMap {
   hierarchical_data: HierarchicalNode;
   title: string;
   original_filename?: string;
+  processing_metadata?: {
+    processing_time?: number;
+    chunk_count?: number;
+    embedding_dimension?: number;
+    stage?: string;
+  };
 }
 
 interface AppState {

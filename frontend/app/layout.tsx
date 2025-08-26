@@ -8,35 +8,35 @@ import { HistorySidebar } from '@/components/HistorySidebar';
 import { MobileHeader } from '@/components/MobileHeader';
 import { AppLayoutWrapper } from '@/components/AppLayoutWrapper';
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
 });
 
 export const metadata: Metadata = {
-  title: 'Knowledge Platform - PDF to Interactive Concept Maps',
-  description: 'Transform your PDF documents into interactive concept maps with AI-powered insights',
-  keywords: ['PDF', 'concept maps', 'AI', 'knowledge platform', 'interactive'],
-  authors: [{ name: 'Knowledge Platform Team' }],
-  creator: 'Knowledge Platform',
-  publisher: 'Knowledge Platform',
+  title: 'VizMind AI - Transform Documents into Intelligent Mind Maps',
+  description: 'Transform your PDF documents into interactive hierarchical mind maps with AI-powered insights and intelligent Q&A',
+  keywords: ['PDF', 'mind maps', 'AI', 'VizMind AI', 'interactive', 'document analysis', 'RAG', 'LangGraph'],
+  authors: [{ name: 'VizMind AI Team' }],
+  creator: 'VizMind AI',
+  publisher: 'VizMind AI',
   formatDetection: {
     email: false,
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://knowledge-platform.com'),
+  metadataBase: new URL('https://vizmind-ai.com'),
   openGraph: {
-    title: 'Knowledge Platform - PDF to Interactive Concept Maps',
-    description: 'Transform your PDF documents into interactive concept maps with AI-powered insights',
+    title: 'VizMind AI - Transform Documents into Intelligent Mind Maps',
+    description: 'Transform your PDF documents into interactive hierarchical mind maps with AI-powered insights and intelligent Q&A',
     type: 'website',
     locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Knowledge Platform - PDF to Interactive Concept Maps',
-    description: 'Transform your PDF documents into interactive concept maps with AI-powered insights',
+    title: 'VizMind AI - Transform Documents into Intelligent Mind Maps',
+    description: 'Transform your PDF documents into interactive hierarchical mind maps with AI-powered insights and intelligent Q&A',
   },
   robots: {
     index: true,
@@ -99,9 +99,9 @@ export default function RootLayout({
             <AppLayoutWrapper>
               {children}
             </AppLayoutWrapper>
-            <Toaster 
-              richColors 
-              position="top-center" 
+            <Toaster
+              richColors
+              position="top-center"
               toastOptions={{
                 className: 'text-responsive-sm',
                 style: {

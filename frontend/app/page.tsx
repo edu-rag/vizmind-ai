@@ -100,16 +100,19 @@ export default function Home() {
           <section id="hero" className="text-center space-y-8 mb-16 min-h-[80vh] flex flex-col justify-center">
             <div className="space-y-6 mb-4">
               <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/60 rounded-full flex items-center justify-center mx-auto">
-                <Network className="h-10 w-10 text-white" />
+                <Brain className="h-10 w-10 text-white" />
               </div>
               <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-                PDF to{' '}
                 <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                  Knowledge Maps
+                  VizMind AI
+                </span>
+                <br />
+                <span className="text-xl md:text-2xl font-normal text-muted-foreground">
+                  Intelligent Mind Mapping
                 </span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-                Upload a PDF and let AI turn it into an interactive concept map for easy exploration and insights.
+                Transform your documents into intelligent, interactive mind maps. Ask questions and get AI-powered insights with advanced retrieval and generation.
               </p>
             </div>
 
@@ -138,7 +141,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-foreground mb-2">AI-Powered Analysis</h3>
               <p className="text-muted-foreground">
-                Advanced AI extracts key concepts and relationships from your documents automatically
+                VizMind AI extracts key concepts and relationships from your documents using advanced LangGraph workflows
               </p>
             </Card>
 
@@ -148,7 +151,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-foreground mb-2">Interactive Exploration</h3>
               <p className="text-muted-foreground">
-                Navigate through concepts, zoom in on details, and discover hidden connections
+                Navigate through hierarchical concepts, explore interconnected ideas, and discover deep insights in your documents
               </p>
             </Card>
 
@@ -156,9 +159,9 @@ export default function Home() {
               <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Smart Insights</h3>
+              <h3 className="text-xl font-bold text-foreground mb-2">Smart RAG Insights</h3>
               <p className="text-muted-foreground">
-                Ask questions about any concept and get AI-powered answers with cited sources
+                Ask questions about any concept and get AI-powered answers with cited sources using intelligent retrieval
               </p>
             </Card>
           </section>

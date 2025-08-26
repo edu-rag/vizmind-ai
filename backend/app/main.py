@@ -13,7 +13,7 @@ from app.services.s3_service import S3Service
 async def lifespan(
     app_instance: FastAPI,
 ):  # Renamed app to app_instance to avoid conflict
-    logger.info("Application startup...")
+    logger.info("VizMind AI application startup...")
     init_mongodb()
 
     # S3 Service initialization
@@ -28,9 +28,9 @@ async def lifespan(
             "⚠️ S3 service not fully configured or client failed to initialize."
         )
 
-    logger.info("LangGraph app initialized.")
+    logger.info("VizMind AI LangGraph workflows initialized.")
     yield
-    logger.info("Application shutdown...")
+    logger.info("VizMind AI application shutdown...")
     mongo_cli = get_mongo_client()
     if mongo_cli:
         mongo_cli.close()
@@ -39,10 +39,10 @@ async def lifespan(
 
 # FastAPI App Instance
 app = FastAPI(
-    title="CMVS API - Structured with JWT Auth",
-    description="Concept Map Visual Synthesizer API. "
+    title="VizMind AI API",
+    description="VizMind AI - Transform documents into interactive mind maps and ask intelligent questions. "
     "Authenticate by clicking the 'Authorize' button and pasting your JWT Bearer token.",
-    version="1.1.0",  # Updated version
+    version="2.0.0",  # Updated version for VizMind AI
     lifespan=lifespan,
     # Define how security schemes are described in OpenAPI (for Swagger UI)
     openapi_components={
@@ -55,10 +55,6 @@ app = FastAPI(
             }
         }
     },
-    # Note: You might not need to explicitly add security=[{"BearerAuth": []}] to each
-    # route if FastAPI correctly infers it from the HTTPBearer dependency.
-    # However, if it doesn't show the lock icon, you might add it to the router:
-    # api_router_v1 = APIRouter(security=[{"BearerAuth": []}])
 )
 
 # Add CORS middleware
@@ -76,9 +72,13 @@ app.include_router(api_router_v1, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Secure CMVS API (JWT Auth)!"}
+    return {
+        "message": "Welcome to VizMind AI API!",
+        "description": "Transform documents into interactive mind maps and ask intelligent questions",
+        "version": "2.0.0",
+    }
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "message": "API is running"}
+    return {"status": "healthy", "service": "VizMind AI API", "version": "2.0.0"}

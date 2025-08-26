@@ -33,10 +33,10 @@ class RAGService:
             groq_api_key=settings.GROQ_API_KEY,
             model_name=settings.LLM_MODEL_NAME_GROQ,
         )
-        # Updated prompt specific to the CMVS project
+        # Updated prompt specific to VizMind AI
         self.prompt = PromptTemplate.from_template(
             """
-            You are an intelligent assistant for the Concept Map Visual Synthesizer (CMVS).
+            You are an intelligent assistant for VizMind AI, a mind mapping platform that transforms documents into interactive visual maps.
             Your purpose is to provide detailed, clear, and structured explanations about concepts found in the user's documents.
 
             Use the following retrieved context from the user's uploaded document to answer the question.
@@ -73,7 +73,7 @@ class RAGService:
             vectorstore = MongoDBAtlasVectorSearch(
                 collection=self.collection,
                 embedding=self.embedding,
-                index_name=settings.MONGODB_ATLAS_VECTOR_SEARCH_INDEX_NAME,
+                index_name=settings.MONGODB_ATLAS_VECTOR_INDEX_NAME,
             )
             logger.info("Successfully connected to MongoDB Atlas Vector Search index.")
 

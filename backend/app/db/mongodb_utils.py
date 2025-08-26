@@ -41,7 +41,7 @@ def get_users_collection():
 
 def get_cmvs_collection():
     db = get_db()
-    return db[settings.MONGODB_CMVS_COLLECTION]
+    return db[settings.MONGODB_MAPS_COLLECTION]
 
 
 def get_chunk_embeddings_collection():

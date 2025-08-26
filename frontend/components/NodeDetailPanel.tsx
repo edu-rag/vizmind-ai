@@ -137,6 +137,7 @@ export function NodeDetailPanel() {
       const result = await getNodeDetails(
         currentMindMap.mongodb_doc_id,
         nodeQuery,
+        10,
         jwt
       );
 

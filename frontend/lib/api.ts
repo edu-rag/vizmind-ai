@@ -1,5 +1,50 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
+// VizMind AI API Types
+export interface AttachmentInfo {
+  filename: string;
+  s3_path?: string;
+  status: string;
+  error_message?: string;
+}
+
+export interface HierarchicalNode {
+  id: string;
+  data: { label: string };
+  children: HierarchicalNode[];
+}
+
+export interface MindMapResponse {
+  attachment: AttachmentInfo;
+  status: string;
+  hierarchical_data?: HierarchicalNode;
+  mongodb_doc_id?: string;
+  error_message?: string;
+  processing_metadata?: {
+    processing_time?: number;
+    chunk_count?: number;
+    embedding_dimension?: number;
+    stage?: string;
+  };
+}
+
+export interface CitationSource {
+  type: string;
+  identifier: string;
+  title?: string;
+  page_number?: number;
+  snippet?: string;
+}
+
+export interface NodeDetailResponse {
+  query: string;
+  answer: string;
+  cited_sources: CitationSource[];
+  confidence_score?: number;
+  processing_time?: number;
+  message?: string;
+}
+
 export interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -86,7 +131,7 @@ export const authenticateWithGoogle = async (googleIdToken: string) => {
 // Legacy concept map generation - REMOVED
 // Use generateHierarchicalMindMap instead
 
-// Generate hierarchical mind map from PDF (NEW)
+// Generate hierarchical mind map from PDF using VizMind AI
 export const generateHierarchicalMindMap = async (file: File, jwt: string) => {
   try {
     const formData = new FormData();
@@ -111,12 +156,30 @@ export const generateHierarchicalMindMap = async (file: File, jwt: string) => {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
-    return { data };
+    const data: MindMapResponse = await response.json();
+
+    // Check if the backend returned an error
+    if (data.status === 'error' || data.error_message) {
+      return { error: data.error_message || 'Mind map generation failed' };
+    }
+
+    // Transform the response to match what the frontend expects
+    if (data.hierarchical_data && data.mongodb_doc_id) {
+      const transformedData = {
+        mongodb_doc_id: data.mongodb_doc_id,
+        title: data.attachment.filename.replace('.pdf', ''),
+        hierarchical_data: data.hierarchical_data,
+        original_filename: data.attachment.filename,
+        processing_metadata: data.processing_metadata
+      };
+      return { data: transformedData };
+    }
+
+    return { error: 'No mind map data received from server' };
   } catch (error) {
     console.error('Generate hierarchical mind map failed:', error);
     return { error: error instanceof Error ? error.message : 'Unknown error' };
-  }
+  };
 };
 
 // Get user's map history
@@ -145,51 +208,29 @@ export const getHierarchicalMindMap = async (mapId: string, jwt: string) => {
   }>(`/api/v1/maps/${mapId}`, {}, jwt);
 };
 
-// Get node details using RAG
+// Get node details using VizMind AI RAG
 export const getNodeDetails = async (
   mapId: string,
   nodeQuery: string,
-  jwt: string,
-  topK: number = 3
-) => {
+  topK: number = 10,
+  jwt: string
+): Promise<ApiResponse<NodeDetailResponse>> => {
   const params = new URLSearchParams({
-    map_id: mapId,
     node_query: nodeQuery,
     top_k: topK.toString(),
   });
 
-  return makeRequest<{
-    query: string;
-    answer: string;
-    cited_sources: Array<{
-      type: string;
-      identifier: string;
-      title: string;
-      snippet: string;
-    }>;
-    message: string;
-  }>(`/api/v1/maps/details?${params.toString()}`, {}, jwt);
+  return makeRequest<NodeDetailResponse>(`/api/v1/maps/${mapId}/details?${params.toString()}`, {}, jwt);
 };
 
-// Ask question about concept
+// Ask question about concept using VizMind AI
 export const askQuestion = async (
   conceptMapId: string,
   question: string,
   jwt: string,
   contextNodeLabel?: string
 ) => {
-
-  return makeRequest<{
-    query: string;
-    answer: string;
-    cited_sources: Array<{
-      type: string;
-      identifier: string;
-      title: string;
-      snippet: string;
-    }>;
-    search_performed: string;
-  }>(`/api/v1/maps/ask`, {
+  return makeRequest<NodeDetailResponse>(`/api/v1/maps/ask`, {
     method: 'POST',
     body: JSON.stringify({
       map_id: conceptMapId,

@@ -203,10 +203,10 @@ export function HistorySidebar() {
               </div>
               <div>
                 <h2 className="text-responsive-lg font-semibold text-foreground">
-                  Knowledge Maps
+                  VizMind AI
                 </h2>
                 <p className="text-responsive-xs text-muted-foreground">
-                  Interactive concept mapping
+                  Intelligent mind mapping
                 </p>
               </div>
             </Link>

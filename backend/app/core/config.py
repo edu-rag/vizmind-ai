@@ -9,8 +9,18 @@ load_dotenv()
 class Settings(BaseSettings):
     # LLM & Embeddings
     GROQ_API_KEY: str
-    MODEL_NAME_FOR_EMBEDDING: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    MODEL_NAME_FOR_EMBEDDING: str = (
+        "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    )
     LLM_MODEL_NAME_GROQ: str = "llama-3.3-70b-versatile"
+
+    # VizMind AI Workflow Settings
+    WORKFLOW_MAX_RETRIES: int = 3
+    WORKFLOW_TIMEOUT_SECONDS: int = 300  # 5 minutes
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+    DEFAULT_TOP_K: int = 10
+    RELEVANCE_THRESHOLD: float = 0.7
 
     # Langsmith
     LANGSMITH_TRACING: bool = False
@@ -20,11 +30,11 @@ class Settings(BaseSettings):
 
     # MongoDB
     MONGODB_URI: str
-    MONGODB_DATABASE_NAME: str = "cmvs_project"
+    MONGODB_DATABASE_NAME: str = "vizmind_ai"
     MONGODB_USERS_COLLECTION: str = "users"
-    MONGODB_CMVS_COLLECTION: str = "concept_maps_api_s3_auth"
-    MONGODB_CHUNKS_COLLECTION: str = "chunk_embeddings"
-    MONGODB_ATLAS_VECTOR_SEARCH_INDEX_NAME: str = "vector_index_on_embedding"
+    MONGODB_MAPS_COLLECTION: str = "mind_maps"
+    MONGODB_CHUNKS_COLLECTION: str = "document_chunks"
+    MONGODB_ATLAS_VECTOR_INDEX_NAME: str = "vector_index"
 
     # S3
     S3_ACCESS_KEY_ID: str

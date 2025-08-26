@@ -26,12 +26,12 @@ export function MobileHeader() {
               <X className="h-5 w-5" />
             )}
           </Button>
-          
+
           <h1 className="text-responsive-lg font-semibold text-foreground truncate">
-            Knowledge Platform
+            VizMind AI
           </h1>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <ThemeToggle size="icon" className="touch-target" />
         </div>
