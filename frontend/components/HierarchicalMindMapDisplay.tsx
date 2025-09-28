@@ -406,6 +406,8 @@ export function HierarchicalMindMapDisplay() {
           nodes={nodes}
           edges={edges}
           direction="RIGHT"
+          readonly={true}
+          panType="drag"
           layoutOptions={{
             'elk.algorithm': 'layered',
             'elk.direction': 'RIGHT',
