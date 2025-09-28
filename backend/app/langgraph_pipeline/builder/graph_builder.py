@@ -10,8 +10,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.langgraph_pipeline.state import DocumentProcessingState, RAGState
 from app.langgraph_pipeline.nodes.document_processing_nodes import (
     extract_content_node,
-    clean_content_node,
-    generate_mind_map_node,
+    extract_outline_node,
+    optimize_mind_map_node,
     chunk_content_node,
     embed_and_store_node,
     finalize_processing_node,
@@ -31,7 +31,7 @@ def create_document_processing_graph():
     """
     Creates the document processing workflow graph.
 
-    Flow: extract_content → clean_content → generate_mind_map → chunk_content → embed_and_store → finalize
+    Flow: extract_content → extract_outline → optimize_mind_map → chunk_content → embed_and_store → finalize
     """
     logger.info("Creating document processing workflow graph")
 
@@ -40,8 +40,8 @@ def create_document_processing_graph():
 
     # Add nodes
     workflow.add_node("extract_content", extract_content_node)
-    workflow.add_node("clean_content", clean_content_node)
-    workflow.add_node("generate_mind_map", generate_mind_map_node)
+    workflow.add_node("extract_outline", extract_outline_node)
+    workflow.add_node("optimize_mind_map", optimize_mind_map_node)
     workflow.add_node("chunk_content", chunk_content_node)
     workflow.add_node("embed_and_store", embed_and_store_node)
     workflow.add_node("finalize", finalize_processing_node)
@@ -54,22 +54,22 @@ def create_document_processing_graph():
         "extract_content",
         _route_document_processing,
         {
-            "clean_content": "clean_content",
+            "extract_outline": "extract_outline",
             "failed": END,
         },
     )
 
     workflow.add_conditional_edges(
-        "clean_content",
+        "extract_outline",
         _route_document_processing,
         {
-            "generate_mind_map": "generate_mind_map",
+            "optimize_mind_map": "optimize_mind_map",
             "failed": END,
         },
     )
 
     workflow.add_conditional_edges(
-        "generate_mind_map",
+        "optimize_mind_map",
         _route_document_processing,
         {
             "chunk_content": "chunk_content",
@@ -178,8 +178,8 @@ def _route_document_processing(state: DocumentProcessingState) -> str:
 
     # Route based on current stage
     stage_routing = {
-        "content_extracted": "clean_content",
-        "content_cleaned": "generate_mind_map",
+        "content_extracted": "extract_outline",
+        "outline_extracted": "optimize_mind_map",
         "mind_map_generated": "chunk_content",
         "content_chunked": "embed_and_store",
         "chunks_embedded": "finalize",
@@ -270,7 +270,6 @@ async def execute_document_processing(
         s3_path=s3_path,
         original_filename=original_filename,
         raw_content=None,
-        cleaned_markdown=None,
         hierarchical_data=None,
         chunks=None,
         stage="initialized",

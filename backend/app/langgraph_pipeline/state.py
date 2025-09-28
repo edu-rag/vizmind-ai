@@ -22,7 +22,7 @@ class DocumentProcessingState(TypedDict):
 
     # Processing stages
     raw_content: Optional[str]
-    cleaned_markdown: Optional[str]
+    outline_text: Optional[str]
     hierarchical_data: Optional[Dict[str, Any]]
     chunks: Optional[List[Document]]
 
@@ -30,7 +30,7 @@ class DocumentProcessingState(TypedDict):
     stage: Literal[
         "initialized",
         "content_extracted",
-        "content_cleaned",
+        "outline_extracted",
         "mind_map_generated",
         "content_chunked",
         "chunks_embedded",

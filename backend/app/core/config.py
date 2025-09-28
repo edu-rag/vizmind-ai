@@ -1,4 +1,5 @@
 import os
+import random
 from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
@@ -8,7 +9,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # LLM & Embeddings
-    GROQ_API_KEY: str
+    GROQ_API_KEYS: str
     MODEL_NAME_FOR_EMBEDDING: str = (
         "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     )
@@ -81,6 +82,18 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         # For Pydantic V2, case_sensitive = False is default for .env
         # For Pydantic V1 settings, you might need case_sensitive = True if your .env keys are uppercase
+
+    def _get_groq_api_keys_list(self) -> List[str]:
+        """Parse comma-separated GROQ_API_KEYS into a list."""
+        return [key.strip() for key in self.GROQ_API_KEYS.split(",") if key.strip()]
+
+    @property
+    def GROQ_API_KEY(self) -> str:
+        """Get a random GROQ API key from the available keys."""
+        api_keys = self._get_groq_api_keys_list()
+        if not api_keys:
+            raise ValueError("No valid GROQ API keys found in GROQ_API_KEYS")
+        return random.choice(api_keys)
 
 
 settings = Settings()

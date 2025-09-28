@@ -12,10 +12,12 @@ VizMind AI is a full-stack intelligent document processing platform that automat
 ## 🚀 Features
 
 ### Backend (FastAPI + LangGraph)
-* **🧠 AI-Powered Mind Mapping**: Transform PDFs into structured hierarchical mind maps using advanced LLM processing
+* **🧠 AI-Powered Mind Mapping**: Transform PDFs into structured hierarchical mind maps using advanced parallel LLM processing with multiple API keys
 * **📚 Intelligent RAG Q&A**: Ask questions about your documents with context-aware AI responses and source citations
 * **💬 Smart Chat History**: Persistent, context-aware conversations with automatic caching and intelligent question deduplication
-* **🔄 LangGraph Workflows**: Robust, scalable processing pipelines with automatic error handling and retry mechanisms
+* **🔄 Advanced LangGraph Workflows**: Robust, scalable processing pipelines with separated node architecture for better maintainability
+* **⚡ Parallel Processing**: Multi-API-key rotation for faster document processing and outline extraction
+* **🎯 Mind Map Optimization**: Dedicated optimization step removes duplicates, standardizes terminology, and improves hierarchy structure
 * **☁️ Cloud-Ready**: S3 integration for document storage and MongoDB Atlas for vector search
 * **🔐 Secure Authentication**: Google Sign-In with JWT tokens for secure API access
 * **⚡ High Performance**: Groq LLM integration for fast inference and Docling for superior document processing
@@ -388,20 +390,28 @@ sequenceDiagram
 
 ### LangGraph Workflows
 
-#### 1. **Document Processing Workflow**
+#### 1. **Enhanced Document Processing Workflow**
 
 ```mermaid
 graph LR
     A[📄 Upload] --> B[🔍 Docling Extract]
-    B --> C[🧹 LLM Clean]
-    C --> D[🧠 Mind Map Generate]
+    B --> C[📝 Parallel Outline Extract]
+    C --> D[🎯 Mind Map Optimize]
     D --> E[✂️ Chunk Content]
     E --> F[🔢 Embed & Store]
     F --> G[✅ Complete]
     
     style A fill:#e3f2fd
-    style G fill:#e8f5e8
+    style C fill:#fff3e0
+    style D fill:#e8f5e8
+    style G fill:#c8e6c9
 ```
+
+**Key Features:**
+- **Parallel Processing**: Multiple ChatGroq API keys for faster processing
+- **Separated Optimization**: Dedicated node for mind map structure optimization
+- **Best Practices Applied**: Removes duplicates, standardizes terminology, balances hierarchy
+- **Error Recovery**: Graceful handling of individual section failures
 
 #### 2. **RAG Query Workflow**
 
@@ -473,14 +483,16 @@ If found: Return cached answer | If new: Add context from recent messages → Ru
 graph TD
     A[PDF Upload] --> B[S3 Storage]
     B --> C[Docling Extraction]
-    C --> D[LLM Content Cleaning]
-    D --> E[Hierarchical Mind Map Generation]
+    C --> D[Parallel Outline Extraction]
+    D --> E[Mind Map Optimization]
     E --> F[Heading-Based Chunking]
     F --> G[Vector Embedding]
     G --> H[MongoDB Storage]
     H --> I[Complete]
     
     style A fill:#e1f5fe
+    style D fill:#fff3e0
+    style E fill:#e8f5e8
     style I fill:#c8e6c9
 ```
 
@@ -607,7 +619,7 @@ cp .env.example .env
 
 ```env
 # LLM & AI Services
-GROQ_API_KEY=your_groq_api_key
+GROQ_API_KEYS=your_groq_api_key_1,your_groq_api_key_2,your_groq_api_key_3
 MODEL_NAME_FOR_EMBEDDING=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
 LLM_MODEL_NAME_GROQ=llama-3.3-70b-versatile
 
@@ -1077,6 +1089,34 @@ export async function askQuestionWithHistory(
 
 ## 🔧 Advanced Configuration
 
+### Mind Map Optimization Features
+
+VizMind AI includes sophisticated mind map optimization that applies industry best practices:
+
+#### **Optimization Techniques**
+* **Duplicate Removal**: Merges identical or very similar concepts across document sections
+* **Terminology Standardization**: Ensures consistent vocabulary throughout the mind map
+* **Hierarchical Balance**: Prevents one branch from being overwhelmingly large
+* **Concise Labeling**: Converts lengthy phrases to clear, memorable keywords (1-5 words)
+* **Logical Grouping**: Clusters related concepts under meaningful parent categories
+* **Depth Control**: Maintains optimal hierarchy depth (maximum 4 levels) for readability
+* **Error Recovery**: Falls back to original structure if optimization fails
+
+#### **Parallel Processing Configuration**
+
+The system supports multiple ChatGroq API keys for enhanced performance:
+
+```env
+# Multiple API keys for parallel processing (comma-separated)
+GROQ_API_KEYS=key1,key2,key3,key4
+
+# This enables:
+# - Faster document processing (4x parallel sections)
+# - Better rate limit handling
+# - Improved fault tolerance
+# - Cost distribution across keys
+```
+
 ### LangGraph Workflow Customization
 
 The workflows can be customized through environment variables:
@@ -1115,11 +1155,23 @@ docker run -p 8000:8000 --env-file .env vizmind-ai
 
 VizMind AI provides comprehensive workflow metrics:
 
-* **Processing Time**: Track document processing duration
+* **Processing Time**: Track document processing duration across all workflow stages
+* **Parallel Processing Metrics**: Monitor API key utilization and section processing times
+* **Mind Map Optimization Statistics**: Track duplicate removal rates, concept merging, and hierarchy improvements
 * **Chunk Statistics**: Monitor chunking and embedding performance
 * **Query Performance**: RAG retrieval and generation metrics
-* **Error Tracking**: Detailed error logging and retry statistics
+* **Error Tracking**: Detailed error logging and retry statistics with workflow stage information
 * **Chat History Analytics**: Monitor cache hit rates, conversation lengths, and user engagement patterns
+
+### Mind Map Quality Metrics
+
+The optimization system provides insights into mind map improvement:
+
+* **Duplicate Reduction Rate**: Percentage of concepts merged during optimization
+* **Hierarchy Balance Score**: Measurement of branch size distribution
+* **Terminology Consistency**: Track standardization improvements
+* **Processing Efficiency**: Compare pre/post optimization token usage
+* **Error Recovery Rate**: Success rate of optimization fallback scenarios
 
 ### Chat Performance Metrics
 
