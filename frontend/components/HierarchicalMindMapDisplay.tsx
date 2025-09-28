@@ -405,23 +405,24 @@ export function HierarchicalMindMapDisplay() {
           key={`${nodes.length}-${edges.length}-${dimensions.width}-${dimensions.height}-${shouldFit}`}
           nodes={nodes}
           edges={edges}
-          direction="DOWN"
+          direction="RIGHT"
           layoutOptions={{
             'elk.algorithm': 'layered',
-            'elk.direction': 'DOWN',
+            'elk.direction': 'RIGHT',
             'elk.spacing.nodeNode': '50',
             'elk.layered.spacing.nodeNodeBetweenLayers': '80',
             'elk.spacing.edgeNode': '30',
             'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
             'elk.alignment': 'CENTER',
             'elk.contentAlignment': 'CENTER',
-            'elk.padding': '[top=100,left=1000,bottom=100,right=1000]', // Add padding around the layout
+            'elk.padding': '[top=1000,left=1000,bottom=1000,right=1000]', // Add padding around the layout
           }}
           pannable={true}
           zoomable={true}
           animated={false}
           fit={shouldFit} // Use the temporary fit state
           maxWidth={8000}
+          maxHeight={8000}
           maxZoom={5}
           minZoom={-2} // Allow much more zoom out
           width={dimensions.width}
