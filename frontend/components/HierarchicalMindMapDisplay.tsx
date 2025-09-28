@@ -261,22 +261,12 @@ export function HierarchicalMindMapDisplay() {
     setNodes(convertedNodes);
     setEdges(convertedEdges);
     setNodeMapping(convertedNodeMapping);
-
-    // Debug logging
-    console.log('HierarchicalMindMapDisplay: State updated', {
-      nodesCount: convertedNodes.length,
-      edgesCount: convertedEdges.length,
-      mappingSize: convertedNodeMapping.size,
-      mappingKeys: Array.from(convertedNodeMapping.keys()),
-      sampleNodes: convertedNodes.slice(0, 5).map(n => ({ id: n.id, text: n.text })),
-      dimensions,
-      hasCurrentMindMap: !!currentMindMap
-    });
   }, [convertedNodes, convertedEdges, convertedNodeMapping, dimensions, currentMindMap]);
 
   const handleReset = useCallback(() => {
     if (currentMindMap?.hierarchical_data) {
       console.log('HierarchicalMindMapDisplay: Resetting view');
+
       const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping: newNodeMapping } = convertHierarchyToReaflow(
         currentMindMap.hierarchical_data
       );
@@ -402,7 +392,7 @@ export function HierarchicalMindMapDisplay() {
 
         <Canvas
           ref={canvasRef}
-          key={`${nodes.length}-${edges.length}-${dimensions.width}-${dimensions.height}-${shouldFit}`}
+          key={`mindmap-${nodes.length}-${edges.length}`}
           nodes={nodes}
           edges={edges}
           direction="RIGHT"
