@@ -15,7 +15,7 @@ interface HierarchicalNode {
 }
 
 // Custom Node Component
-const CustomNode = ({ id, width = 120, height = 40, nodeMapping, ...nodeProps }: any) => {
+const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }: any) => {
   const { selectedNodeData, setSelectedNodeData, setDetailPanelOpen } = useAppStore();
 
   const handleClick = useCallback((event: React.MouseEvent) => {
@@ -76,6 +76,7 @@ const CustomNode = ({ id, width = 120, height = 40, nodeMapping, ...nodeProps }:
       width={width}
       height={height}
       onClick={handleClick}
+      draggable={false}
     >
       <div
         className={cn(
@@ -414,14 +415,15 @@ export function HierarchicalMindMapDisplay() {
             'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
             'elk.alignment': 'CENTER',
             'elk.contentAlignment': 'CENTER',
-            'elk.padding': '[top=100,left=100,bottom=100,right=100]', // Add padding around the layout
+            'elk.padding': '[top=100,left=1000,bottom=100,right=1000]', // Add padding around the layout
           }}
           pannable={true}
           zoomable={true}
           animated={false}
           fit={shouldFit} // Use the temporary fit state
+          maxWidth={8000}
           maxZoom={5}
-          minZoom={0.05} // Allow much more zoom out
+          minZoom={-2} // Allow much more zoom out
           width={dimensions.width}
           height={dimensions.height}
           node={(nodeProps) => (
