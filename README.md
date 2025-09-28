@@ -390,20 +390,56 @@ sequenceDiagram
 
 #### 1. **Document Processing Workflow**
 
-```
-Upload → Docling Extract → LLM Clean → Mind Map Generate → Chunk Content → Embed & Store → Complete
+```mermaid
+graph LR
+    A[📄 Upload] --> B[🔍 Docling Extract]
+    B --> C[🧹 LLM Clean]
+    C --> D[🧠 Mind Map Generate]
+    D --> E[✂️ Chunk Content]
+    E --> F[🔢 Embed & Store]
+    F --> G[✅ Complete]
+    
+    style A fill:#e3f2fd
+    style G fill:#e8f5e8
 ```
 
 #### 2. **RAG Query Workflow**
 
-```
-Query → Retrieve Documents → Grade Relevance → Generate Answer → Cite Sources → Complete
+```mermaid
+graph LR
+    A[❓ Query Input] --> B[🔍 Vector Search]
+    B --> C[📄 Retrieve Top-K Documents]
+    C --> D{📊 Documents Found?}
+    
+    D -->|Yes| E[🧠 Initialize LLM Grader]
+    D -->|No| K[🤖 Generate with Empty Context]
+   
+    E --> J{🔍 Relevant Docs Found?}
+    J -->|Yes| K[🤖 Generate Answer with Context]
+    J -->|No| K
+    
+    K --> M[📚 Create Citation Sources]
+    M --> O[✅ Complete]
+    
+    style A fill:#e3f2fd
+    style O fill:#e8f5e8
 ```
 
 #### 3. **Chat History Management Workflow**
 
-```
-Question → Check Cache → If Found: Return Cached | If Not: Run RAG → Save Q&A → Return Response
+```mermaid
+graph TD
+    A[💬 Question] --> B{🔍 Check Cache}
+    B -->|Found| C[⚡ Return Cached]
+    B -->|Not Found| D[🔄 Run RAG]
+    D --> E[💾 Save Q&A]
+    E --> F[📤 Return Response]
+    C --> G[✅ Complete]
+    F --> G
+    
+    style A fill:#e3f2fd
+    style G fill:#e8f5e8
+    style C fill:#fff3e0
 ```
 
 ## 🔄 Application Flow
