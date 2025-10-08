@@ -59,6 +59,7 @@ class RAGState(TypedDict):
     # Mind map context (for focused retrieval)
     node_id: Optional[str]
     node_label: Optional[str]
+    node_parent: Optional[str]  # Parent node label for hierarchical context
     node_children: Optional[List[str]]  # List of child node labels for context
 
     # Conversation history

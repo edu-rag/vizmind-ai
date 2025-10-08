@@ -25,6 +25,9 @@ async def ask_question_endpoint(
     node_label: str = Body(
         None, description="Label of the node (for chat history context)"
     ),
+    node_parent: str = Body(
+        None, description="Label of the parent node (for hierarchical context)"
+    ),
     node_children: list = Body(
         None, description="List of child node labels (for hierarchical context)"
     ),
@@ -38,8 +41,8 @@ async def ask_question_endpoint(
     2. If found, return the cached answer from history
     3. If not found, run RAG workflow and save both question and answer to history
 
-    The node_children parameter provides hierarchical context - it helps the AI understand
-    the scope of the node without diluting focus on the main concept.
+    The node_parent parameter provides hierarchical context showing where this node fits.
+    The node_children parameter provides scope understanding for the node.
     """
     if not question:
         raise HTTPException(status_code=400, detail="A question is required.")
@@ -129,6 +132,7 @@ async def ask_question_endpoint(
             top_k=top_k,
             node_id=node_id,
             node_label=node_label,
+            node_parent=node_parent if node_parent else None,
             node_children=node_children if node_children else None,
         )
 

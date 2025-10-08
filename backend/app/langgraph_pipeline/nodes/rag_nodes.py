@@ -104,6 +104,10 @@ async def grade_documents_node(state: RAGState) -> RAGState:
         if state.get("node_label"):
             node_context = f"\n\n**Mind Map Node Context:** {state['node_label']}"
 
+            # Add parent context if available (shows hierarchical position)
+            if state.get("node_parent"):
+                node_context += f"\n(This is a subtopic under: {state['node_parent']})"
+
             # Add children context if available (for scope understanding)
             if state.get("node_children") and len(state["node_children"]) > 0:
                 children_list = ", ".join(
@@ -208,6 +212,12 @@ async def generate_answer_node(state: RAGState) -> RAGState:
 The user clicked on the mind map node: "{state['node_label']}"
 
 """
+            # Add parent context if available (shows where this fits in hierarchy)
+            if state.get("node_parent"):
+                node_context_section += (
+                    f'(This is a subtopic under: "{state["node_parent"]}")\n\n'
+                )
+
             # Add hierarchical context if children are available
             if state.get("node_children") and len(state["node_children"]) > 0:
                 children_preview = state["node_children"][:5]  # Show first 5 children

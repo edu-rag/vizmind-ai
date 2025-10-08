@@ -146,6 +146,7 @@ class VizMindAIService:
         top_k: int = 10,
         node_id: str = None,
         node_label: str = None,
+        node_parent: str = None,
         node_children: List[str] = None,
     ) -> NodeDetailResponse:
         """
@@ -158,6 +159,7 @@ class VizMindAIService:
             top_k: Number of documents to retrieve
             node_id: ID of the clicked mind map node (optional, for context)
             node_label: Label of the clicked mind map node (optional, for context)
+            node_parent: Label of the parent node (optional, for hierarchical context)
             node_children: List of child node labels (optional, for hierarchical context)
 
         Returns:
@@ -166,6 +168,8 @@ class VizMindAIService:
         logger.info(f"[VizMindAI] Starting RAG query for user {user_id}, map {map_id}")
         if node_label:
             logger.info(f"[VizMindAI] Node context: {node_label}")
+            if node_parent:
+                logger.info(f"[VizMindAI] Node parent: {node_parent}")
             if node_children:
                 logger.info(
                     f"[VizMindAI] Node has {len(node_children)} children: {node_children[:3]}{'...' if len(node_children) > 3 else ''}"
@@ -180,6 +184,7 @@ class VizMindAIService:
                 top_k=top_k,
                 node_id=node_id,
                 node_label=node_label,
+                node_parent=node_parent,
                 node_children=node_children,
             )
 

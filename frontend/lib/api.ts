@@ -225,6 +225,7 @@ export const askQuestionWithHistory = async (
   jwt: string,
   nodeId?: string,
   nodeLabel?: string,
+  nodeParent?: string,
   nodeChildren?: string[],
   topK: number = 5
 ) => {
@@ -235,6 +236,7 @@ export const askQuestionWithHistory = async (
       question: question,
       node_id: nodeId,
       node_label: nodeLabel,
+      node_parent: nodeParent,
       node_children: nodeChildren,
       top_k: topK,
     }),

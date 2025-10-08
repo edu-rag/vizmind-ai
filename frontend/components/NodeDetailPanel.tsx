@@ -29,6 +29,31 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
+/**
+ * Helper function to find the parent node's label by traversing the hierarchy.
+ * Returns undefined if the node is the root or parent is not found.
+ */
+function findParentLabel(hierarchy: any, targetNodeId: string, parent: any = null): string | undefined {
+  if (!hierarchy) return undefined;
+
+  // If this is the target node, return the parent's label
+  if (hierarchy.id === targetNodeId) {
+    return parent ? parent.data.label : undefined;
+  }
+
+  // Recursively search in children
+  if (hierarchy.children && hierarchy.children.length > 0) {
+    for (const child of hierarchy.children) {
+      const result = findParentLabel(child, targetNodeId, hierarchy);
+      if (result !== undefined) {
+        return result;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 export function NodeDetailPanel() {
   const {
     selectedNodeData,
@@ -76,6 +101,9 @@ export function NodeDetailPanel() {
       ? selectedNodeData.children.map((child: any) => child.data.label)
       : undefined;
 
+    // Extract parent label by traversing the hierarchy
+    const nodeParent = findParentLabel(currentMindMap.hierarchical_data, selectedNodeData.id);
+
     isLoadingRef.current = true;
     setIsLoading(true);
 
@@ -86,6 +114,7 @@ export function NodeDetailPanel() {
         jwt,
         selectedNodeData.id,
         selectedNodeData.data.label,
+        nodeParent,
         nodeChildren
       );
 
@@ -182,6 +211,9 @@ export function NodeDetailPanel() {
       ? selectedNodeData.children.map((child: any) => child.data.label)
       : undefined;
 
+    // Extract parent label by traversing the hierarchy
+    const nodeParent = findParentLabel(currentMindMap.hierarchical_data, selectedNodeData.id);
+
     // Set the current question immediately and start loading
     setCurrentQuestion(questionText);
     setIsAsking(true);
@@ -193,6 +225,7 @@ export function NodeDetailPanel() {
         jwt,
         selectedNodeData.id,
         selectedNodeData.data.label,
+        nodeParent,
         nodeChildren
       );
 
