@@ -103,10 +103,11 @@ export default function RootLayout({
               richColors
               position="top-center"
               toastOptions={{
-                className: 'text-responsive-sm',
+                className: 'text-responsive-sm glass-strong shadow-xl',
                 style: {
                   minHeight: '44px',
                 },
+                duration: 4000,
               }}
             />
           </GoogleAuthProvider>

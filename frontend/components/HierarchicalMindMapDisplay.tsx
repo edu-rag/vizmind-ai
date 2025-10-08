@@ -5,7 +5,9 @@ import { Canvas, Node as ReaflowNode, Edge as ReaflowEdge, NodeData, EdgeData, C
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
-import { Maximize2, Minimize2, RotateCcw, ZoomIn } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Maximize2, Minimize2, RotateCcw, ZoomIn, ZoomOut, Sparkles, Brain } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Types for the hierarchical data structure
 interface HierarchicalNode {
@@ -14,26 +16,22 @@ interface HierarchicalNode {
   children: HierarchicalNode[];
 }
 
-// Custom Node Component
+// Custom Node Component with beautiful gradients
 const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }: any) => {
   const { selectedNodeData, setSelectedNodeData, setDetailPanelOpen } = useAppStore();
+  const [isHovered, setIsHovered] = useState(false);
 
   const handleClick = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
     console.log('Node clicked:', id);
     console.log('Available node mappings:', Array.from(nodeMapping.keys()));
 
-    // First try the direct ID
     let fullNodeData = nodeMapping.get(id);
 
     if (!fullNodeData) {
-      // Reaflow seems to modify IDs by adding prefixes like "ref-5-node-"
-      // Try to extract the original ID by looking for patterns
       let originalId = id;
 
-      // Remove common reaflow prefixes
       if (id.startsWith('ref-')) {
-        // Pattern: "ref-5-node-node-18" -> "node-18"
         const parts = id.split('-');
         if (parts.length >= 4 && parts[2] === 'node') {
           originalId = parts.slice(3).join('-');
@@ -44,7 +42,6 @@ const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }:
       fullNodeData = nodeMapping.get(originalId);
 
       if (!fullNodeData) {
-        // Try even more flexible matching - look for any node that ends with the same suffix
         for (const [mappingId, nodeData] of nodeMapping.entries()) {
           if (id.endsWith(mappingId) || mappingId === originalId || id.includes(mappingId)) {
             fullNodeData = nodeData;
@@ -69,6 +66,22 @@ const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }:
     }
   }, [id, setSelectedNodeData, setDetailPanelOpen, nodeMapping]);
 
+  const isSelected = useMemo(() => {
+    if (!selectedNodeData) return false;
+
+    if (selectedNodeData.id === id) return true;
+
+    if (id.startsWith('ref-')) {
+      const parts = id.split('-');
+      if (parts.length >= 4 && parts[2] === 'node') {
+        const originalId = parts.slice(3).join('-');
+        return selectedNodeData.id === originalId;
+      }
+    }
+
+    return false;
+  }, [selectedNodeData, id]);
+
   return (
     <ReaflowNode
       {...nodeProps}
@@ -78,52 +91,70 @@ const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }:
       onClick={handleClick}
       draggable={false}
     >
-      <div
+      <motion.div
         className={cn(
-          'w-full h-full px-2 py-1 rounded-md border-2 bg-background transition-all duration-200 shadow-sm flex items-center justify-center text-center cursor-pointer',
-          'hover:border-primary/50 hover:shadow-md hover:scale-105',
-          // Check if this node is selected by comparing with the stored selectedNodeData
-          (() => {
-            if (!selectedNodeData) return false;
-
-            // Direct match
-            if (selectedNodeData.id === id) return true;
-
-            // Check if the reaflow ID corresponds to this node
-            // Pattern: "ref-5-node-node-18" should match selectedNodeData.id "node-18"
-            if (id.startsWith('ref-')) {
-              const parts = id.split('-');
-              if (parts.length >= 4 && parts[2] === 'node') {
-                const originalId = parts.slice(3).join('-');
-                return selectedNodeData.id === originalId;
-              }
-            }
-
-            return false;
-          })()
-            ? 'border-primary bg-primary/5 shadow-lg'
-            : 'border-border'
+          'w-full h-full rounded-xl transition-all duration-300 cursor-pointer relative overflow-hidden',
+          'flex items-center justify-center text-center shadow-lg',
+          isSelected
+            ? 'gradient-ai shadow-xl ring-4 ring-primary/30'
+            : 'bg-background border-2 border-border shadow-md',
+          'hover:shadow-2xl hover:scale-105'
         )}
         style={{ width, height }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.98 }}
       >
-        <div className="font-medium text-xs text-foreground truncate leading-tight">
+        {/* Gradient overlay on hover */}
+        <AnimatePresence>
+          {isHovered && !isSelected && (
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-primary/10 to-purple-500/10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Sparkle icon for selected nodes */}
+        {isSelected && (
+          <motion.div
+            className="absolute top-1 right-1"
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring' as const, stiffness: 200 }}
+          >
+            <Sparkles className="h-3 w-3 text-white drop-shadow-lg" />
+          </motion.div>
+        )}
+
+        <div
+          className={cn(
+            'font-semibold text-xs truncate leading-tight px-3 relative z-10',
+            isSelected ? 'text-white' : 'text-foreground'
+          )}
+        >
           {nodeProps.text || id}
         </div>
-      </div>
+      </motion.div>
     </ReaflowNode>
   );
 };
 
-// Custom Edge Component  
+// Custom Edge Component with gradient
 const CustomEdge = (edgeProps: any) => {
   return (
     <ReaflowEdge
       {...edgeProps}
-      className="stroke-muted-foreground"
+      className="transition-colors duration-200"
       style={{
-        stroke: 'currentColor',
-        strokeWidth: 2,
-        markerEnd: 'url(#arrowhead)',
+        stroke: 'hsl(var(--primary))',
+        strokeWidth: 2.5,
+        strokeOpacity: 0.4,
+        markerEnd: 'url(#arrowhead-gradient)',
       }}
     />
   );
@@ -131,7 +162,6 @@ const CustomEdge = (edgeProps: any) => {
 
 /**
  * Convert hierarchical JSON to reaflow format
- * This is the core function that transforms any hierarchy into flat nodes and edges
  */
 function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
   nodes: NodeData[],
@@ -143,21 +173,17 @@ function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
   const nodeMapping = new Map<string, HierarchicalNode>();
 
   function traverse(node: HierarchicalNode, parentId: string | null = null) {
-    // Calculate dynamic width based on text length - much smaller and more reasonable
-    const textWidth = Math.max(100, Math.min(200, node.data.label.length * 6 + 20));
+    const textWidth = Math.max(120, Math.min(220, node.data.label.length * 7 + 30));
 
-    // Add current node to nodes array
     nodes.push({
       id: node.id,
       text: node.data.label,
       width: textWidth,
-      height: 40, // Reduced height
+      height: 50,
     });
 
-    // Store the mapping between the node ID and the full node data
     nodeMapping.set(node.id, node);
 
-    // If this node has a parent, create an edge
     if (parentId) {
       edges.push({
         id: `${parentId}-${node.id}`,
@@ -166,13 +192,11 @@ function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
       });
     }
 
-    // Recursively process children
     if (node.children && node.children.length > 0) {
       node.children.forEach(child => traverse(child, node.id));
     }
   }
 
-  // Start the traversal
   traverse(hierarchy);
 
   return { nodes, edges, nodeMapping };
@@ -186,7 +210,8 @@ export function HierarchicalMindMapDisplay() {
   const [isMobile, setIsMobile] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [nodeMapping, setNodeMapping] = useState<Map<string, HierarchicalNode>>(new Map());
-  const [shouldFit, setShouldFit] = useState(false); // New state for temporary fit mode
+  const [shouldFit, setShouldFit] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const canvasRef = useRef<CanvasRef>(null);
 
   // Handle resizing and get dimensions
@@ -195,22 +220,19 @@ export function HierarchicalMindMapDisplay() {
       const container = document.querySelector('#mind-map-container');
       if (container) {
         const rect = container.getBoundingClientRect();
-        // Add padding to canvas dimensions to allow for better panning and scrolling
         setDimensions({
-          width: (rect.width || 800) + 400, // Add 200px padding on each side
-          height: (rect.height || 600) + 400 // Add 200px padding on top and bottom
+          width: (rect.width || 800) + 400,
+          height: (rect.height || 600) + 400
         });
       }
       setIsMobile(window.innerWidth < 768);
     };
 
-    // Initial dimension update with a slight delay to ensure container is rendered
     setTimeout(updateDimensions, 100);
     window.addEventListener('resize', updateDimensions);
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
-  // Additional resize observer for more precise container tracking
   useEffect(() => {
     const container = document.querySelector('#mind-map-container');
     if (!container) return;
@@ -218,10 +240,9 @@ export function HierarchicalMindMapDisplay() {
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        // Add padding to canvas dimensions to allow for better panning and scrolling
         setDimensions({
-          width: (width || 800) + 400, // Add 200px padding on each side
-          height: (height || 600) + 400 // Add 200px padding on top and bottom
+          width: (width || 800) + 400,
+          height: (height || 600) + 400
         });
       }
     });
@@ -230,7 +251,6 @@ export function HierarchicalMindMapDisplay() {
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Memoize the converted nodes and edges
   const { convertedNodes, convertedEdges, convertedNodeMapping } = useMemo(() => {
     if (!currentMindMap?.hierarchical_data) {
       return { convertedNodes: [], convertedEdges: [], convertedNodeMapping: new Map() };
@@ -256,7 +276,6 @@ export function HierarchicalMindMapDisplay() {
     }
   }, [currentMindMap?.hierarchical_data]);
 
-  // Update state when conversion changes
   useEffect(() => {
     setNodes(convertedNodes);
     setEdges(convertedEdges);
@@ -273,8 +292,8 @@ export function HierarchicalMindMapDisplay() {
       setNodes(reaflowNodes);
       setEdges(reaflowEdges);
       setNodeMapping(newNodeMapping);
+      setZoom(1);
 
-      // Force a re-render and layout update after a small delay
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 200);
@@ -282,23 +301,28 @@ export function HierarchicalMindMapDisplay() {
   }, [currentMindMap]);
 
   const handleFitToView = useCallback(() => {
-    // Temporarily enable fit mode to trigger a fit-to-view
     setShouldFit(true);
     setTimeout(() => {
       setShouldFit(false);
     }, 100);
   }, []);
 
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => Math.min(prev + 0.2, 5));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => Math.max(prev - 0.2, 0.2));
+  }, []);
+
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(!isFullscreen);
 
     if (!isFullscreen) {
-      // Request fullscreen
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen();
       }
     } else {
-      // Exit fullscreen
       if (document.exitFullscreen) {
         document.exitFullscreen();
       }
@@ -307,23 +331,38 @@ export function HierarchicalMindMapDisplay() {
 
   if (!currentMindMap) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-500">
-        <div className="text-center">
-          <p className="text-lg font-medium">No mind map available</p>
-          <p className="text-sm">Upload a document to generate a hierarchical mind map</p>
-        </div>
-      </div>
+      <motion.div
+        className="flex items-center justify-center h-full"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+      >
+        <Card className="text-center p-8 gradient-ai-subtle border-2">
+          <Brain className="h-16 w-16 mx-auto mb-4 text-primary" />
+          <p className="text-lg font-semibold mb-2">No mind map available</p>
+          <p className="text-sm text-muted-foreground">Upload a document to generate a hierarchical mind map</p>
+        </Card>
+      </motion.div>
     );
   }
 
   if (nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-500">
-        <div className="text-center">
-          <p className="text-lg font-medium">Loading mind map...</p>
-          <p className="text-sm">Processing hierarchical structure</p>
-        </div>
-      </div>
+      <motion.div
+        className="flex items-center justify-center h-full"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+        <Card className="text-center p-8 gradient-ai-subtle border-2">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          >
+            <Brain className="h-16 w-16 mx-auto mb-4 text-primary" />
+          </motion.div>
+          <p className="text-lg font-semibold mb-2">Loading mind map...</p>
+          <p className="text-sm text-muted-foreground">Processing hierarchical structure</p>
+        </Card>
+      </motion.div>
     );
   }
 
@@ -331,60 +370,99 @@ export function HierarchicalMindMapDisplay() {
     <div
       id="mind-map-container"
       className={cn(
-        'w-full h-full bg-background border border-border rounded-lg relative min-h-0 min-w-0',
-        'overflow-hidden', // Ensure proper clipping
+        'w-full h-full bg-gradient-to-br from-background via-background to-primary/5 rounded-lg relative min-h-0 min-w-0',
+        'overflow-hidden shadow-2xl border-2 border-border',
         isFullscreen && 'fixed inset-0 z-50 rounded-none'
       )}
       style={{ width: '100%', height: '100%' }}
     >
-      {/* Controls */}
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleReset}
-          className="bg-background/80 backdrop-blur-sm"
-        >
-          <RotateCcw className="h-4 w-4" />
-          {!isMobile && <span className="ml-2">Reset View</span>}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={toggleFullscreen}
-          className="bg-background/80 backdrop-blur-sm"
-        >
-          {isFullscreen ? (
-            <>
-              <Minimize2 className="h-4 w-4" />
-              {!isMobile && <span className="ml-2">Exit Fullscreen</span>}
-            </>
-          ) : (
-            <>
-              <Maximize2 className="h-4 w-4" />
-              {!isMobile && <span className="ml-2">Fullscreen</span>}
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Floating Control Panel */}
+      <motion.div
+        className="absolute top-4 right-4 z-10 glass-strong rounded-xl p-2 shadow-xl"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleZoomIn}
+            className="h-10 w-10 hover:bg-primary/10 transition-colors"
+            title="Zoom In"
+          >
+            <ZoomIn className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleZoomOut}
+            className="h-10 w-10 hover:bg-primary/10 transition-colors"
+            title="Zoom Out"
+          >
+            <ZoomOut className="h-5 w-5" />
+          </Button>
+          <div className="h-px bg-border my-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleReset}
+            className="h-10 w-10 hover:bg-primary/10 transition-colors"
+            title="Reset View"
+          >
+            <RotateCcw className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            className="h-10 w-10 hover:bg-primary/10 transition-colors"
+            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-5 w-5" />
+            ) : (
+              <Maximize2 className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Stats Badge */}
+      <motion.div
+        className="absolute top-4 left-4 z-10 glass rounded-lg px-4 py-2 shadow-lg"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <Brain className="h-4 w-4 text-primary" />
+          <span className="font-semibold">{nodes.length}</span>
+          <span className="text-muted-foreground">concepts</span>
+        </div>
+      </motion.div>
 
       {/* Mind Map Canvas */}
       <div className="absolute inset-0">
-        {/* SVG definitions for arrow markers */}
+        {/* SVG definitions for gradient arrow markers */}
         <svg width="0" height="0" style={{ position: 'absolute' }}>
           <defs>
+            <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.7" />
+            </linearGradient>
             <marker
-              id="arrowhead"
-              markerWidth="10"
-              markerHeight="7"
-              refX="9"
-              refY="3.5"
+              id="arrowhead-gradient"
+              markerWidth="12"
+              markerHeight="8"
+              refX="11"
+              refY="4"
               orient="auto"
             >
               <polygon
-                points="0 0, 10 3.5, 0 7"
-                fill="currentColor"
-                className="text-muted-foreground"
+                points="0 0, 12 4, 0 8"
+                fill="hsl(var(--primary))"
+                fillOpacity="0.6"
               />
             </marker>
           </defs>
@@ -401,22 +479,22 @@ export function HierarchicalMindMapDisplay() {
           layoutOptions={{
             'elk.algorithm': 'layered',
             'elk.direction': 'RIGHT',
-            'elk.spacing.nodeNode': '50',
-            'elk.layered.spacing.nodeNodeBetweenLayers': '80',
-            'elk.spacing.edgeNode': '30',
+            'elk.spacing.nodeNode': '60',
+            'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+            'elk.spacing.edgeNode': '40',
             'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
             'elk.alignment': 'CENTER',
             'elk.contentAlignment': 'CENTER',
-            'elk.padding': '[top=1000,left=1000,bottom=1000,right=1000]', // Add padding around the layout
+            'elk.padding': '[top=1000,left=1000,bottom=1000,right=1000]',
           }}
           pannable={true}
           zoomable={true}
-          animated={false}
-          fit={shouldFit} // Use the temporary fit state
+          animated={true}
+          fit={shouldFit}
           maxWidth={8000}
           maxHeight={8000}
           maxZoom={5}
-          minZoom={-2} // Allow much more zoom out
+          minZoom={-2}
           width={dimensions.width}
           height={dimensions.height}
           node={(nodeProps) => (

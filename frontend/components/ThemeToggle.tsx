@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Moon, Sun, Monitor } from 'lucide-react';
 import { useThemeStore } from '@/lib/theme-store';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface ThemeToggleProps {
@@ -17,10 +18,10 @@ interface ThemeToggleProps {
   className?: string;
 }
 
-export function ThemeToggle({ 
-  variant = 'ghost', 
+export function ThemeToggle({
+  variant = 'ghost',
   size = 'icon',
-  className 
+  className
 }: ThemeToggleProps) {
   const { theme, resolvedTheme, setTheme } = useThemeStore();
 
@@ -43,55 +44,78 @@ export function ThemeToggle({
           variant={variant}
           size={size}
           className={cn(
-            'transition-all duration-200 hover:scale-105',
+            'transition-all duration-200 hover:scale-105 touch-target',
             className
           )}
           aria-label={`Current theme: ${getLabel()}. Click to change theme`}
         >
-          <div className="relative">
-            {getIcon()}
-            <span className="sr-only">Toggle theme</span>
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={theme + resolvedTheme}
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              exit={{ scale: 0, rotate: 180 }}
+              transition={{ duration: 0.2 }}
+            >
+              {getIcon()}
+            </motion.div>
+          </AnimatePresence>
+          <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[140px]">
+      <DropdownMenuContent align="end" className="min-w-[140px] touch-target">
         <DropdownMenuItem
           onClick={() => setTheme('light')}
           className={cn(
-            'cursor-pointer flex items-center gap-2',
+            'cursor-pointer flex items-center gap-2 touch-target',
             theme === 'light' && 'bg-accent'
           )}
         >
           <Sun className="h-4 w-4" />
           <span>Light</span>
           {theme === 'light' && (
-            <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
+            <motion.div
+              className="ml-auto h-2 w-2 rounded-full bg-primary"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring' as const, stiffness: 500 }}
+            />
           )}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme('dark')}
           className={cn(
-            'cursor-pointer flex items-center gap-2',
+            'cursor-pointer flex items-center gap-2 touch-target',
             theme === 'dark' && 'bg-accent'
           )}
         >
           <Moon className="h-4 w-4" />
           <span>Dark</span>
           {theme === 'dark' && (
-            <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
+            <motion.div
+              className="ml-auto h-2 w-2 rounded-full bg-primary"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring' as const, stiffness: 500 }}
+            />
           )}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme('system')}
           className={cn(
-            'cursor-pointer flex items-center gap-2',
+            'cursor-pointer flex items-center gap-2 touch-target',
             theme === 'system' && 'bg-accent'
           )}
         >
           <Monitor className="h-4 w-4" />
           <span>System</span>
           {theme === 'system' && (
-            <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
+            <motion.div
+              className="ml-auto h-2 w-2 rounded-full bg-primary"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring' as const, stiffness: 500 }}
+            />
           )}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -100,10 +124,10 @@ export function ThemeToggle({
 }
 
 // Simple toggle version (just switches between light/dark)
-export function SimpleThemeToggle({ 
-  variant = 'ghost', 
+export function SimpleThemeToggle({
+  variant = 'ghost',
   size = 'icon',
-  className 
+  className
 }: ThemeToggleProps) {
   const { resolvedTheme, toggleTheme } = useThemeStore();
 

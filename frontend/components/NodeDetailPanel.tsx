@@ -1,19 +1,33 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Send, ExternalLink, Loader2 } from 'lucide-react';
+import {
+  Send,
+  ExternalLink,
+  Loader2,
+  Sparkles,
+  MessageSquare,
+  BookOpen,
+  Trash2,
+  Bot,
+  User as UserIcon,
+  X
+} from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { askQuestionWithHistory, deleteChatHistory } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function NodeDetailPanel() {
   const {
@@ -23,15 +37,6 @@ export function NodeDetailPanel() {
     currentMindMap,
     jwt,
   } = useAppStore();
-
-  console.log('🏪 Store state:', {
-    selectedNodeData,
-    isDetailPanelOpen,
-    hasCurrentMindMap: !!currentMindMap,
-    hasJwt: !!jwt,
-    mindMapId: currentMindMap?.mongodb_doc_id,
-    nodeLabel: selectedNodeData?.data.label
-  });
 
   const [isLoading, setIsLoading] = useState(false);
   const [initialAnswer, setInitialAnswer] = useState<string | null>(null);
@@ -44,28 +49,12 @@ export function NodeDetailPanel() {
   } | null>(null);
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [isMobile, setIsMobile] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const questionInputRef = useRef<HTMLInputElement>(null);
   const isLoadingRef = useRef(false);
-
-  // Helper function to find a node in the hierarchical structure
-  const findNodeInHierarchy = useCallback((hierarchy: any, nodeId: string): { id: string; data: { label: string } } | null => {
-    if (!hierarchy) return null;
-
-    if (hierarchy.id === nodeId) {
-      return { id: hierarchy.id, data: { label: hierarchy.data.label } };
-    }
-
-    if (hierarchy.children) {
-      for (const child of hierarchy.children) {
-        const found = findNodeInHierarchy(child, nodeId);
-        if (found) return found;
-      }
-    }
-
-    return null;
-  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -78,38 +67,14 @@ export function NodeDetailPanel() {
   }, []);
 
   const handleGetNodeDetails = useCallback(async () => {
-    console.log('🔍 handleGetNodeDetails called:', {
-      hasCurrentMindMap: !!currentMindMap,
-      hasJwt: !!jwt,
-      selectedNodeData,
-      isLoadingRefCurrent: isLoadingRef.current,
-      mapId: currentMindMap?.mongodb_doc_id
-    });
+    if (!currentMindMap || !jwt || !selectedNodeData || isLoadingRef.current) return;
 
-    if (!currentMindMap || !jwt || !selectedNodeData) {
-      console.log('❌ Early return from handleGetNodeDetails:', {
-        missingCurrentMindMap: !currentMindMap,
-        missingJwt: !jwt,
-        missingSelectedNodeData: !selectedNodeData
-      });
-      return;
-    }
-
-    // Prevent multiple concurrent calls
-    if (isLoadingRef.current) {
-      console.log('⏭️ Already loading, skipping duplicate call');
-      return;
-    }
-
-    // Use the node label for the query - create a natural question
     const nodeQuery = `What is ${selectedNodeData.data.label}? Provide detailed information about this concept.`;
-    console.log('🔎 Using nodeQuery:', nodeQuery);
 
     isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
-      console.log('🚀 Making API call to askQuestionWithHistory...');
       const result = await askQuestionWithHistory(
         currentMindMap.mongodb_doc_id,
         nodeQuery,
@@ -118,66 +83,46 @@ export function NodeDetailPanel() {
         selectedNodeData.data.label
       );
 
-      console.log('✅ API result:', result);
-
       if (result.data) {
-        console.log('🔍 API result.data:', JSON.stringify(result.data, null, 2));
         setInitialAnswer(result.data.answer);
         setInitialCitedSources(result.data.cited_sources || []);
-        console.log('📝 Node details set successfully - answer length:', result.data.answer?.length);
       } else {
-        console.log('❌ No data in API result');
         toast.error('Failed to get node details');
       }
     } catch (error) {
       toast.error('Failed to fetch node details');
-      console.error('💥 Node details error:', error);
+      console.error('Node details error:', error);
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
-      console.log('🏁 Finished API call');
     }
   }, [currentMindMap, jwt, selectedNodeData]);
 
   useEffect(() => {
-    console.log('🎯 Effect triggered for API call:', {
-      selectedNodeData,
-      hasCurrentMindMap: !!currentMindMap,
-      hasJwt: !!jwt,
-      mapId: currentMindMap?.mongodb_doc_id
-    });
-
     if (selectedNodeData && currentMindMap && jwt) {
-      console.log('✅ Conditions met, calling handleGetNodeDetails');
       handleGetNodeDetails();
-    } else {
-      console.log('❌ Conditions not met for API call');
     }
   }, [selectedNodeData, currentMindMap, jwt, handleGetNodeDetails]);
 
-  // Reset loading state and clear previous data when node changes or panel opens
   useEffect(() => {
     if (isDetailPanelOpen && selectedNodeData) {
-      console.log('🔄 Reset effect triggered:', { selectedNodeId: selectedNodeData.id, currentNodeId });
-
-      // Only clear data when switching nodes, don't manage loading state here
       if (currentNodeId !== selectedNodeData.id) {
-        console.log('🗑️ Clearing data for node switch from', currentNodeId, 'to', selectedNodeData.id);
         setInitialAnswer(null);
         setInitialCitedSources([]);
-        setLastQuestionAnswer(null); // Clear last Q&A when switching nodes
+        setLastQuestionAnswer(null);
+        setCurrentQuestion('');
         setCurrentNodeId(selectedNodeData.id);
+        setActiveTab('details');
       }
     }
   }, [isDetailPanelOpen, selectedNodeData, currentNodeId]);
 
-  // Clear all data when selectedNodeData becomes null (e.g., when no node is selected)
   useEffect(() => {
     if (!selectedNodeData) {
-      console.log('🗑️ Clearing all data because no node is selected');
       setInitialAnswer(null);
       setInitialCitedSources([]);
       setLastQuestionAnswer(null);
+      setCurrentQuestion('');
       setQuestion('');
       setCurrentNodeId(null);
       isLoadingRef.current = false;
@@ -185,12 +130,10 @@ export function NodeDetailPanel() {
     }
   }, [selectedNodeData]);
 
-  // Function to clear conversation history
   const handleClearConversation = useCallback(async () => {
     if (!currentMindMap || !jwt || !selectedNodeData) return;
 
     try {
-      console.log('🗑️ Clearing conversation for node:', selectedNodeData.id);
       const result = await deleteChatHistory(
         currentMindMap.mongodb_doc_id,
         selectedNodeData.id,
@@ -198,58 +141,41 @@ export function NodeDetailPanel() {
       );
 
       if (result.data?.success) {
-        setLastQuestionAnswer(null); // Clear last Q&A when conversation is cleared
+        setLastQuestionAnswer(null);
+        setCurrentQuestion('');
         toast.success('Conversation cleared successfully');
-        console.log('✅ Conversation cleared from backend');
       } else {
         toast.error('Failed to clear conversation');
-        console.error('❌ Failed to clear conversation:', result.data?.message);
       }
     } catch (error) {
       toast.error('Failed to clear conversation');
-      console.error('❌ Error clearing conversation:', error);
+      console.error('Error clearing conversation:', error);
     }
   }, [currentMindMap, jwt, selectedNodeData]);
 
-  // Separate effect for focusing input when panel opens
   useEffect(() => {
-    if (isDetailPanelOpen && !isLoading && questionInputRef.current) {
+    if (isDetailPanelOpen && !isLoading && questionInputRef.current && activeTab === 'chat') {
       const timer = setTimeout(() => {
         questionInputRef.current?.focus();
-      }, 500); // Small delay to ensure the panel is fully open
-
+      }, 300);
       return () => clearTimeout(timer);
     }
-  }, [isDetailPanelOpen, isLoading]);
+  }, [isDetailPanelOpen, isLoading, activeTab]);
 
-  // Auto-scroll to bottom when new Q&A is added
   useEffect(() => {
     if (conversationEndRef.current) {
       conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [lastQuestionAnswer, isAsking]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isDetailPanelOpen) {
-        handleClose();
-      }
-    };
-
-    if (isDetailPanelOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isDetailPanelOpen]);
+  }, [lastQuestionAnswer, isAsking, currentQuestion]);
 
   const handleAskQuestion = useCallback(async (questionText: string) => {
     if (!currentMindMap || !jwt || !selectedNodeData) return;
 
+    // Set the current question immediately and start loading
+    setCurrentQuestion(questionText);
     setIsAsking(true);
 
     try {
-      console.log('🚀 Asking question...');
       const result = await askQuestionWithHistory(
         currentMindMap.mongodb_doc_id,
         questionText,
@@ -259,19 +185,19 @@ export function NodeDetailPanel() {
       );
 
       if (result.data) {
-        // Store the last question and answer
         setLastQuestionAnswer({
           question: questionText,
           answer: result.data.answer,
           citedSources: result.data.cited_sources || []
         });
-
+        setCurrentQuestion(''); // Clear current question after successful response
         toast.success('Question answered successfully');
-        console.log('✅ Question answered - backend handles history');
       } else {
+        setCurrentQuestion(''); // Clear on error too
         toast.error('Failed to get an answer');
       }
     } catch (error) {
+      setCurrentQuestion(''); // Clear on error
       toast.error('Failed to ask question');
       console.error('Question error:', error);
     } finally {
@@ -283,14 +209,14 @@ export function NodeDetailPanel() {
     e.preventDefault();
     if (!question.trim()) return;
 
-    await handleAskQuestion(question);
-    setQuestion('');
+    const questionToAsk = question;
+    setQuestion(''); // Clear input immediately
+    await handleAskQuestion(questionToAsk);
   }, [question, handleAskQuestion]);
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
       setDetailPanelOpen(false);
-      // Only reset question input when closing, preserve node data for reopening
       setTimeout(() => {
         setQuestion('');
         isLoadingRef.current = false;
@@ -301,296 +227,343 @@ export function NodeDetailPanel() {
     }
   }, [setDetailPanelOpen]);
 
-  const handleClose = useCallback(() => {
-    handleOpenChange(false);
-  }, [handleOpenChange]);
-
   return (
-    <Sheet open={isDetailPanelOpen} onOpenChange={handleOpenChange}>
-      <SheetContent
-        className={cn(
-          'p-0 flex flex-col',
-          isMobile ? 'w-full max-w-full' : 'w-[400px] sm:w-[500px]'
-        )}
-        side={isMobile ? 'bottom' : 'right'}
-      >
-        <div className="h-full flex flex-col py-4">
-          <SheetHeader className="spacing-mobile pb-4 safe-area-top">
-            <SheetTitle className="text-left text-responsive-lg">
-              Details for: {selectedNodeData?.data.label}
-            </SheetTitle>
-            <SheetDescription className="text-left text-responsive-sm">
-              Explore this concept with AI-powered insights
-            </SheetDescription>
-          </SheetHeader>
+    <Drawer handleOnly={false} open={isDetailPanelOpen} onOpenChange={handleOpenChange}>
+      <DrawerContent className={cn(
+        'h-[95vh] max-h-[95vh]',
+        isMobile && 'h-[95vh] max-h-[95vh]'
+      )}>
+        <div className="mx-auto w-full max-w-4xl h-full flex flex-col">
 
-          <Separator />
-
-          <ScrollArea className="flex-1 spacing-mobile">
-            <div className="space-y-6">
-              {/* Initial Node Details Section */}
-              <div>
-                <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
-                  Node Details
-                </h3>
-
-                {isLoading ? (
-                  <Card className="spacing-mobile-sm">
-                    <div className="space-y-3">
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                    </div>
-                  </Card>
-                ) : initialAnswer ? (
-                  <Card className="spacing-mobile-sm">
-                    <div className="text-responsive-sm text-foreground leading-relaxed prose prose-sm max-w-none">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ children }) => <h1 className="text-lg font-bold mb-3 text-foreground">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
-                          p: ({ children }) => <p className="mb-2 text-foreground leading-relaxed">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
-                          li: ({ children }) => <li className="text-foreground">{children}</li>,
-                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                          em: ({ children }) => <em className="italic text-foreground">{children}</em>,
-                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground mb-2">{children}</blockquote>,
-                        }}
-                      >
-                        {initialAnswer}
-                      </ReactMarkdown>
-                    </div>
-                  </Card>
-                ) : (
-                  <Card className="spacing-mobile-sm">
-                    <p className="text-responsive-sm text-muted-foreground">
-                      No details available yet.
-                    </p>
-                  </Card>
-                )}
+          <DrawerHeader className="px-6 pt-2 pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <DrawerTitle className="text-2xl font-bold flex items-center gap-3 mb-2">
+                  <motion.div
+                    className="w-10 h-10 gradient-ai rounded-xl flex items-center justify-center shadow-lg"
+                    animate={{ rotate: [0, 5, -5, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                  >
+                    <Sparkles className="h-5 w-5 text-white" />
+                  </motion.div>
+                  <span className="gradient-text truncate">
+                    {selectedNodeData?.data.label}
+                  </span>
+                </DrawerTitle>
+                <DrawerDescription className="text-base">
+                  Explore this concept with AI-powered insights
+                </DrawerDescription>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleOpenChange(false)}
+                className="flex-shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </DrawerHeader>
 
-              {/* Initial Cited Sources Section */}
-              {initialCitedSources.length > 0 && (
-                <div>
-                  <h3 className="text-responsive-sm font-semibold text-foreground mb-3">
-                    Sources
-                  </h3>
-                  <div className="space-y-3">
-                    {initialCitedSources.map((source, index) => (
-                      <Card key={index} className="spacing-mobile-sm">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-responsive-sm font-medium text-foreground flex-1">
-                              {source.title}
-                            </h4>
-                            {source.identifier && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="touch-target flex-shrink-0"
-                                asChild
+
+          <div className="flex-1 overflow-hidden px-6 pb-8">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+              <TabsList className="grid w-full grid-cols-2 mb-4 sticky top-0 z-10 bg-background">
+                <TabsTrigger value="details" className="gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Details
+                </TabsTrigger>
+                <TabsTrigger value="chat" className="gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Chat
+                  {lastQuestionAnswer && (
+                    <Badge variant="secondary" className="ml-2 text-xs">1</Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <div className="flex-1 overflow-hidden">
+                <TabsContent value="details" className="h-full mt-0">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-6 pb-6">
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {isLoading ? (
+                          <Card className="p-6 gradient-ai-subtle border-2">
+                            <div className="space-y-3">
+                              <Skeleton className="h-4 w-full" />
+                              <Skeleton className="h-4 w-full" />
+                              <Skeleton className="h-4 w-3/4" />
+                            </div>
+                          </Card>
+                        ) : initialAnswer ? (
+                          <Card className="p-6 border-2 hover:border-primary/30 transition-colors">
+                            <div className="prose prose-sm max-w-none dark:prose-invert">
+                              <ReactMarkdown
+                                components={{
+                                  h1: ({ children }) => <h1 className="text-xl font-bold mb-3 gradient-text">{children}</h1>,
+                                  h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-foreground">{children}</h2>,
+                                  h3: ({ children }) => <h3 className="text-base font-medium mb-2 text-foreground">{children}</h3>,
+                                  p: ({ children }) => <p className="mb-3 text-foreground leading-relaxed">{children}</p>,
+                                  ul: ({ children }) => <ul className="list-disc ml-5 mb-3 space-y-1">{children}</ul>,
+                                  ol: ({ children }) => <ol className="list-decimal ml-5 mb-3 space-y-1">{children}</ol>,
+                                  li: ({ children }) => <li className="text-foreground">{children}</li>,
+                                  strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
+                                  em: ({ children }) => <em className="italic text-foreground">{children}</em>,
+                                  code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>,
+                                  blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
+                                }}
                               >
-                                <a
-                                  href={source.identifier}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  aria-label="Open source link"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
+                                {initialAnswer}
+                              </ReactMarkdown>
+                            </div>
+                          </Card>
+                        ) : (
+                          <Card className="p-6 text-center gradient-ai-subtle border-2">
+                            <Sparkles className="h-12 w-12 mx-auto mb-3 text-primary" />
+                            <p className="text-muted-foreground">
+                              No details available yet. Switch to Chat to ask questions!
+                            </p>
+                          </Card>
+                        )}
+                      </motion.div>
 
-              {/* Last Question & Answer Section */}
-              {lastQuestionAnswer && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-responsive-sm font-semibold text-foreground">
-                      Last Question
-                    </h3>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleClearConversation}
-                      className="h-6 px-2 text-xs"
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                  <div className="space-y-4">
-                    {/* Question */}
-                    <Card className="spacing-mobile-sm bg-muted/50 border-muted">
-                      <div className="flex items-start space-x-2">
-                        <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-responsive-sm font-medium text-foreground mb-1">
-                            Your Question:
-                          </p>
-                          <p className="text-responsive-sm text-foreground">
-                            {lastQuestionAnswer.question}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-
-                    {/* Answer */}
-                    <div className="space-y-3">
-                      <Card className="spacing-mobile-sm">
-                        <div className="text-responsive-sm text-foreground leading-relaxed prose prose-sm max-w-none">
-                          <ReactMarkdown
-                            components={{
-                              h1: ({ children }) => <h1 className="text-lg font-bold mb-3 text-foreground">{children}</h1>,
-                              h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-                              h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
-                              p: ({ children }) => <p className="mb-2 text-foreground leading-relaxed">{children}</p>,
-                              ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
-                              li: ({ children }) => <li className="text-foreground">{children}</li>,
-                              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-foreground">{children}</em>,
-                              code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                              blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground mb-2">{children}</blockquote>,
-                            }}
-                          >
-                            {lastQuestionAnswer.answer}
-                          </ReactMarkdown>
-                        </div>
-                      </Card>
-
-                      {/* Cited Sources for this answer */}
-                      {lastQuestionAnswer.citedSources && lastQuestionAnswer.citedSources.length > 0 && (
-                        <div className="ml-4">
-                          <h4 className="text-responsive-xs font-medium text-muted-foreground mb-2">
-                            Sources for this answer:
-                          </h4>
-                          <div className="space-y-2">
-                            {lastQuestionAnswer.citedSources.map((source: any, index: number) => (
-                              <Card key={index} className="spacing-mobile-sm border-muted">
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <h5 className="text-responsive-xs font-medium text-foreground flex-1">
-                                      {source.title}
-                                    </h5>
+                      {initialCitedSources.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: 0.1 }}
+                        >
+                          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                            <BookOpen className="h-5 w-5 text-primary" />
+                            Sources
+                          </h3>
+                          <div className="space-y-3">
+                            {initialCitedSources.map((source, index) => (
+                              <motion.div
+                                key={index}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.2, delay: index * 0.05 }}
+                              >
+                                <Card className="p-4 hover:shadow-lg hover:border-primary/30 transition-all">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1">
+                                      <h4 className="font-medium text-foreground mb-1">
+                                        {source.title}
+                                      </h4>
+                                      {source.identifier && (
+                                        <p className="text-xs text-muted-foreground truncate">
+                                          {source.identifier}
+                                        </p>
+                                      )}
+                                    </div>
                                     {source.identifier && (
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="touch-target flex-shrink-0 h-6 w-6"
+                                        className="h-8 w-8 flex-shrink-0"
                                         asChild
                                       >
                                         <a
                                           href={source.identifier}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          aria-label="Open source link"
+                                          aria-label="Open source"
                                         >
-                                          <ExternalLink className="h-3 w-3" />
+                                          <ExternalLink className="h-4 w-4" />
                                         </a>
                                       </Button>
                                     )}
                                   </div>
-                                </div>
-                              </Card>
+                                </Card>
+                              </motion.div>
                             ))}
                           </div>
-                        </div>
+                        </motion.div>
                       )}
                     </div>
+                  </ScrollArea>
+                </TabsContent>
 
-                    {/* Scroll anchor */}
-                    <div ref={conversationEndRef} />
+                <TabsContent value="chat" className="h-full mt-0">
+                  <div className="h-full flex flex-col">
+                    <ScrollArea className="flex-1 pr-4">
+                      <div className="space-y-4 pb-4">
+                        {(lastQuestionAnswer || currentQuestion) ? (
+                          <AnimatePresence>
+                            <motion.div
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="space-y-4"
+                            >
+                              {/* Show last Q&A if exists */}
+                              {lastQuestionAnswer && (
+                                <>
+                                  {/* User Question */}
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                                      <UserIcon className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
+                                      <p className="text-sm font-medium text-foreground">
+                                        {lastQuestionAnswer.question}
+                                      </p>
+                                    </Card>
+                                  </div>
+
+                                  {/* AI Answer */}
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
+                                      <Bot className="h-4 w-4 text-white" />
+                                    </div>
+                                    <Card className="flex-1 p-4">
+                                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                                        <ReactMarkdown
+                                          components={{
+                                            p: ({ children }) => <p className="mb-2 text-foreground leading-relaxed">{children}</p>,
+                                            ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
+                                            ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
+                                            strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
+                                            code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                                          }}
+                                        >
+                                          {lastQuestionAnswer.answer}
+                                        </ReactMarkdown>
+                                      </div>
+
+                                      {lastQuestionAnswer.citedSources && lastQuestionAnswer.citedSources.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-border">
+                                          <p className="text-xs font-medium text-muted-foreground mb-2">Sources:</p>
+                                          <div className="space-y-2">
+                                            {lastQuestionAnswer.citedSources.map((source: any, index: number) => (
+                                              <div key={index} className="flex items-center gap-2 text-xs">
+                                                <span className="text-muted-foreground">{source.title}</span>
+                                                {source.identifier && (
+                                                  <a
+                                                    href={source.identifier}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-primary hover:underline"
+                                                  >
+                                                    <ExternalLink className="h-3 w-3" />
+                                                  </a>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Card>
+                                  </div>
+
+                                  <div className="flex justify-end">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={handleClearConversation}
+                                      className="gap-2 text-muted-foreground hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      Clear conversation
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+
+                              {/* Show current question being asked */}
+                              {currentQuestion && isAsking && (
+                                <div className="flex items-start gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                                    <UserIcon className="h-4 w-4 text-primary" />
+                                  </div>
+                                  <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
+                                    <p className="text-sm font-medium text-foreground">
+                                      {currentQuestion}
+                                    </p>
+                                  </Card>
+                                </div>
+                              )}
+                            </motion.div>
+                          </AnimatePresence>
+                        ) : (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="text-center py-12"
+                          >
+                            <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                            <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Start a conversation about this concept
+                            </p>
+                          </motion.div>
+                        )}
+
+                        {isAsking && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-start gap-3"
+                          >
+                            <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
+                              <Loader2 className="h-4 w-4 text-white animate-spin" />
+                            </div>
+                            <Card className="flex-1 p-4">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <div className="flex gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </div>
+                                Thinking...
+                              </div>
+                            </Card>
+                          </motion.div>
+                        )}
+
+                        <div ref={conversationEndRef} />
+                      </div>
+                    </ScrollArea>
+
+                    <div className="pt-4 px-2 border-t border-border shrink-0">
+                      <form onSubmit={handleSubmitQuestion} className="relative w-full">
+                        <Input
+                          ref={questionInputRef}
+                          placeholder="Ask anything about this concept..."
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          disabled={isAsking || isLoading}
+                          className="pr-12 h-12 w-full focus:ring-2 focus:ring-primary/20"
+                          autoComplete="off"
+                        />
+                        <Button
+                          type="submit"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 gradient-ai text-white hover:opacity-90 transition-opacity"
+                          disabled={!question.trim() || isAsking || isLoading}
+                        >
+                          {isAsking ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </form>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Press Enter to send • Your conversation is automatically saved
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* Loading indicator for current question */}
-              {isAsking && (
-                <Card className="spacing-mobile-sm">
-                  <div className="flex items-center space-x-3">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <p className="text-responsive-sm text-muted-foreground">
-                      Generating answer...
-                    </p>
-                  </div>
-                </Card>
-              )}
-            </div>
-          </ScrollArea>
-
-          <Separator />
-
-          {/* Ask Follow-up Question */}
-          <div className="spacing-mobile pt-4 safe-area-bottom">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-responsive-sm font-semibold text-foreground">
-                  Ask a Question
-                </h3>
-                <div className="flex items-center space-x-2">
-                  {lastQuestionAnswer && (
-                    <span className="text-responsive-xs text-muted-foreground">
-                      Last question answered
-                    </span>
-                  )}
-                  {lastQuestionAnswer && (
-                    <span className="text-responsive-xs text-green-600 dark:text-green-400">
-                      History saved
-                    </span>
-                  )}
-                </div>
+                </TabsContent>
               </div>
-
-              <div className="text-responsive-xs text-muted-foreground mb-2">
-                Your conversation history is automatically saved and preserved for each concept node. Context from recent messages helps provide better answers.
-              </div>
-
-              <form onSubmit={handleSubmitQuestion} className="relative">
-                <Input
-                  ref={questionInputRef}
-                  placeholder="Ask anything about this concept..."
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (question.trim() && !isAsking && !isLoading) {
-                        handleSubmitQuestion(e as any);
-                      }
-                    }
-                  }}
-                  disabled={isAsking || isLoading}
-                  className="form-mobile text-responsive-sm pr-12"
-                  autoComplete="off"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  variant="ghost"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 hover:bg-muted"
-                  disabled={!question.trim() || isAsking || isLoading}
-                >
-                  {isAsking ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              </form>
-            </div>
+            </Tabs>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { HistorySidebar } from '@/components/HistorySidebar';
 import { MobileHeader } from '@/components/MobileHeader';
+import { PageTransition } from '@/components/PageTransition';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -39,7 +40,11 @@ export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
 
   // For map pages, don't show the sidebar layout
   if (isMapPage) {
-    return <>{children}</>;
+    return (
+      <PageTransition>
+        {children}
+      </PageTransition>
+    );
   }
 
   // For home page and other pages, show the sidebar layout
@@ -64,11 +69,13 @@ export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
 
       {/* Main Content */}
       <div className={cn(
-        'flex-1 transition-all duration-300 ease-in-out overflow-hidden',
+        'flex-1 transition-all duration-300 ease-in-out overflow-y-auto',
         'flex flex-col',
         !isMobile && (isSidebarCollapsed ? 'ml-0' : 'ml-0')
       )}>
-        {children}
+        <PageTransition>
+          {children}
+        </PageTransition>
       </div>
     </div>
   );
