@@ -507,19 +507,16 @@ export function HierarchicalMindMapDisplay() {
     }
   }, [currentMindMap]);
 
-  const handleFitToView = useCallback(() => {
-    setShouldFit(true);
-    setTimeout(() => {
-      setShouldFit(false);
-    }, 100);
-  }, []);
-
   const handleZoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev + 0.2, 5));
+    if (canvasRef.current?.zoomIn) {
+      canvasRef.current.zoomIn();
+    }
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev - 0.2, 0.2));
+    if (canvasRef.current?.zoomOut) {
+      canvasRef.current.zoomOut();
+    }
   }, []);
 
   const handleExpandAll = useCallback(() => {
@@ -679,10 +676,17 @@ export function HierarchicalMindMapDisplay() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <div className="flex items-center gap-2 text-sm">
-          <Brain className="h-4 w-4 text-primary" />
-          <span className="font-semibold">{convertedNodes.length}</span>
-          <span className="text-muted-foreground">concepts</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <Brain className="h-4 w-4 text-primary" />
+            <span className="font-semibold">{convertedNodes.length}</span>
+            <span className="text-muted-foreground">concepts</span>
+          </div>
+          <div className="h-4 w-px bg-border" />
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Zoom:</span>
+            <span className="font-semibold">{Math.round(zoom * 100)}%</span>
+          </div>
         </div>
       </motion.div>
 
@@ -738,8 +742,10 @@ export function HierarchicalMindMapDisplay() {
           maxHeight={8000}
           maxZoom={5}
           minZoom={-2}
+          zoom={zoom}
           width={dimensions.width}
           height={dimensions.height}
+          onZoomChange={(z) => setZoom(z)}
           node={(nodeProps) => (
             <CustomNode
               {...nodeProps}
