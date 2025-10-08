@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Maximize2, Minimize2, RotateCcw, ZoomIn, ZoomOut, Sparkles, Brain } from 'lucide-react';
+import { Maximize2, Minimize2, RotateCcw, ZoomIn, ZoomOut, Sparkles, Brain, ChevronRight, ChevronDown, Maximize, Minimize } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Types for the hierarchical data structure
@@ -16,15 +16,43 @@ interface HierarchicalNode {
   children: HierarchicalNode[];
 }
 
+interface NodeMetadata {
+  hasChildren: boolean;
+  parentId: string | null;
+  depth: number;
+}
+
 // Custom Node Component with beautiful gradients
-const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }: any) => {
+const CustomNode = ({
+  id,
+  width = 200,
+  height = 40,
+  nodeMapping,
+  nodeMetadata,
+  expandedNodes,
+  onToggleExpand,
+  text,
+  ...nodeProps
+}: any) => {
   const { selectedNodeData, setSelectedNodeData, setDetailPanelOpen } = useAppStore();
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleClick = useCallback((event: React.MouseEvent) => {
+  // Extract the actual node ID from reaflow's generated ID
+  // Reaflow adds "ref-XXX-node-" prefix, we need to extract the original ID
+  const actualNodeId = useMemo(() => {
+    if (id.startsWith('ref-') && id.includes('-node-')) {
+      const parts = id.split('-node-');
+      return parts.length > 1 ? parts[1] : id;
+    }
+    return id;
+  }, [id]);
+
+  const metadata = nodeMetadata.get(actualNodeId);
+  const isExpanded = expandedNodes.has(actualNodeId);
+  const hasChildren = metadata?.hasChildren || false;
+
+  const handleNodeClick = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
-    console.log('Node clicked:', id);
-    console.log('Available node mappings:', Array.from(nodeMapping.keys()));
 
     let fullNodeData = nodeMapping.get(id);
 
@@ -38,24 +66,20 @@ const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }:
         }
       }
 
-      console.log('Trying to find original ID:', originalId, 'from reaflow ID:', id);
       fullNodeData = nodeMapping.get(originalId);
 
       if (!fullNodeData) {
         for (const [mappingId, nodeData] of nodeMapping.entries()) {
           if (id.endsWith(mappingId) || mappingId === originalId || id.includes(mappingId)) {
             fullNodeData = nodeData;
-            console.log('Found node via flexible match:', mappingId, '->', id);
             break;
           }
         }
       }
     }
 
-    console.log('Found node data:', fullNodeData);
 
     if (fullNodeData) {
-      console.log('Setting selected node data and opening panel');
       setSelectedNodeData(fullNodeData);
       setTimeout(() => {
         setDetailPanelOpen(true);
@@ -65,6 +89,13 @@ const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }:
       console.warn('Available IDs:', Array.from(nodeMapping.keys()));
     }
   }, [id, setSelectedNodeData, setDetailPanelOpen, nodeMapping]);
+
+  const handleChevronClick = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (hasChildren) {
+      onToggleExpand(actualNodeId);
+    }
+  }, [actualNodeId, hasChildren, onToggleExpand]);
 
   const isSelected = useMemo(() => {
     if (!selectedNodeData) return false;
@@ -88,58 +119,122 @@ const CustomNode = ({ id, width = 200, height = 40, nodeMapping, ...nodeProps }:
       id={id}
       width={width}
       height={height}
-      onClick={handleClick}
       draggable={false}
+      style={{
+        fill: 'transparent',
+        stroke: 'transparent',
+        strokeWidth: 0
+      }}
+      port={null}
+      label={null}
     >
-      <motion.div
-        className={cn(
-          'w-full h-full rounded-xl transition-all duration-300 cursor-pointer relative overflow-hidden',
-          'flex items-center justify-center text-center shadow-lg',
-          isSelected
-            ? 'gradient-ai shadow-xl ring-4 ring-primary/30'
-            : 'bg-background border-2 border-border shadow-md',
-          'hover:shadow-2xl hover:scale-105'
-        )}
-        style={{ width, height }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        {/* Gradient overlay on hover */}
-        <AnimatePresence>
-          {isHovered && !isSelected && (
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-primary/10 to-purple-500/10"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Sparkle icon for selected nodes */}
-        {isSelected && (
-          <motion.div
-            className="absolute top-1 right-1"
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: 'spring' as const, stiffness: 200 }}
-          >
-            <Sparkles className="h-3 w-3 text-white drop-shadow-lg" />
-          </motion.div>
-        )}
-
-        <div
-          className={cn(
-            'font-semibold text-xs truncate leading-tight px-3 relative z-10',
-            isSelected ? 'text-white' : 'text-foreground'
-          )}
+      {(event) => (
+        <foreignObject
+          height={event.height}
+          width={event.width}
+          x={0}
+          y={0}
+          style={{ overflow: 'visible' }}
         >
-          {nodeProps.text || id}
-        </div>
-      </motion.div>
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'fixed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <motion.div
+              className={cn(
+                'w-full h-full rounded-xl transition-all duration-300 cursor-pointer relative overflow-visible',
+                'flex items-center justify-center text-center shadow-lg',
+                isSelected
+                  ? 'gradient-ai shadow-xl ring-4 ring-primary/30'
+                  : 'bg-background border-2 border-border shadow-md',
+                'hover:shadow-2xl'
+              )}
+              style={{ width: event.width, height: event.height }}
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+              onClick={handleNodeClick}
+              whileTap={{ scale: 0.98 }}
+            >
+              {/* Gradient overlay on hover */}
+              <AnimatePresence>
+                {isHovered && !isSelected && (
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-br from-primary/10 to-purple-500/10 rounded-xl"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Chevron icon for expandable nodes */}
+              {hasChildren && (
+                <div
+                  className="absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer"
+                  onClick={handleChevronClick}
+                  style={{ pointerEvents: 'auto', zIndex: 1000 }}
+                >
+                  <motion.div
+                    className={cn(
+                      "rounded-full p-1 transition-colors flex items-center justify-center shadow-lg",
+                      isSelected ? "bg-white/90 hover:bg-white" : "bg-background hover:bg-primary/10 border border-border"
+                    )}
+                    whileHover={{ scale: 1.15 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className={cn(
+                        "h-3.5 w-3.5 transition-colors",
+                        isSelected ? "text-primary" : "text-primary"
+                      )} />
+                    ) : (
+                      <ChevronRight className={cn(
+                        "h-3.5 w-3.5 transition-colors",
+                        isSelected ? "text-primary" : "text-primary"
+                      )} />
+                    )}
+                  </motion.div>
+                </div>
+              )}
+
+              {/* Sparkle icon for selected nodes */}
+              {isSelected && (
+                <motion.div
+                  className="absolute top-1 right-1"
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring' as const, stiffness: 200 }}
+                >
+                  <Sparkles className="h-3 w-3 text-white drop-shadow-lg" />
+                </motion.div>
+              )}
+
+              <div
+                className={cn(
+                  'font-semibold text-xs leading-tight relative z-10',
+                  isSelected ? 'text-white' : 'text-foreground',
+                  hasChildren ? 'px-3 pr-6' : 'px-3'
+                )}
+                style={{
+                  overflow: 'visible',
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  textAlign: 'center'
+                }}
+              >
+                {text || id}
+              </div>
+            </motion.div>
+          </div>
+        </foreignObject>
+      )}
     </ReaflowNode>
   );
 };
@@ -166,13 +261,15 @@ const CustomEdge = (edgeProps: any) => {
 function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
   nodes: NodeData[],
   edges: EdgeData[],
-  nodeMapping: Map<string, HierarchicalNode>
+  nodeMapping: Map<string, HierarchicalNode>,
+  nodeMetadata: Map<string, NodeMetadata>
 } {
   const nodes: NodeData[] = [];
   const edges: EdgeData[] = [];
   const nodeMapping = new Map<string, HierarchicalNode>();
+  const nodeMetadata = new Map<string, NodeMetadata>();
 
-  function traverse(node: HierarchicalNode, parentId: string | null = null) {
+  function traverse(node: HierarchicalNode, parentId: string | null = null, depth: number = 0) {
     const textWidth = Math.max(120, Math.min(220, node.data.label.length * 7 + 30));
 
     nodes.push({
@@ -183,6 +280,11 @@ function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
     });
 
     nodeMapping.set(node.id, node);
+    nodeMetadata.set(node.id, {
+      hasChildren: node.children && node.children.length > 0,
+      parentId,
+      depth
+    });
 
     if (parentId) {
       edges.push({
@@ -193,13 +295,13 @@ function convertHierarchyToReaflow(hierarchy: HierarchicalNode): {
     }
 
     if (node.children && node.children.length > 0) {
-      node.children.forEach(child => traverse(child, node.id));
+      node.children.forEach(child => traverse(child, node.id, depth + 1));
     }
   }
 
   traverse(hierarchy);
 
-  return { nodes, edges, nodeMapping };
+  return { nodes, edges, nodeMapping, nodeMetadata };
 }
 
 export function HierarchicalMindMapDisplay() {
@@ -210,9 +312,12 @@ export function HierarchicalMindMapDisplay() {
   const [isMobile, setIsMobile] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [nodeMapping, setNodeMapping] = useState<Map<string, HierarchicalNode>>(new Map());
+  const [nodeMetadata, setNodeMetadata] = useState<Map<string, NodeMetadata>>(new Map());
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [shouldFit, setShouldFit] = useState(false);
   const [zoom, setZoom] = useState(1);
   const canvasRef = useRef<CanvasRef>(null);
+  const canvasKey = useRef(0);
 
   // Handle resizing and get dimensions
   useEffect(() => {
@@ -251,48 +356,150 @@ export function HierarchicalMindMapDisplay() {
     return () => resizeObserver.disconnect();
   }, []);
 
-  const { convertedNodes, convertedEdges, convertedNodeMapping } = useMemo(() => {
+  const { convertedNodes, convertedEdges, convertedNodeMapping, convertedNodeMetadata } = useMemo(() => {
     if (!currentMindMap?.hierarchical_data) {
-      return { convertedNodes: [], convertedEdges: [], convertedNodeMapping: new Map() };
+      return {
+        convertedNodes: [],
+        convertedEdges: [],
+        convertedNodeMapping: new Map(),
+        convertedNodeMetadata: new Map()
+      };
     }
 
     try {
-      const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping } = convertHierarchyToReaflow(
+      const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping, nodeMetadata } = convertHierarchyToReaflow(
         currentMindMap.hierarchical_data
       );
 
-      console.log('HierarchicalMindMapDisplay: Converted to reaflow format:', {
-        nodes: reaflowNodes.length,
-        edges: reaflowEdges.length,
-        nodesSample: reaflowNodes.slice(0, 3),
-        edgesSample: reaflowEdges.slice(0, 3),
-        mappingSize: nodeMapping.size
-      });
-
-      return { convertedNodes: reaflowNodes, convertedEdges: reaflowEdges, convertedNodeMapping: nodeMapping };
+      return {
+        convertedNodes: reaflowNodes,
+        convertedEdges: reaflowEdges,
+        convertedNodeMapping: nodeMapping,
+        convertedNodeMetadata: nodeMetadata
+      };
     } catch (error) {
       console.error('HierarchicalMindMapDisplay: Error converting hierarchy:', error);
-      return { convertedNodes: [], convertedEdges: [], convertedNodeMapping: new Map() };
+      return {
+        convertedNodes: [],
+        convertedEdges: [],
+        convertedNodeMapping: new Map(),
+        convertedNodeMetadata: new Map()
+      };
     }
   }, [currentMindMap?.hierarchical_data]);
 
+  // Initialize expanded nodes (expand root and first level by default)
   useEffect(() => {
-    setNodes(convertedNodes);
-    setEdges(convertedEdges);
+    if (convertedNodeMetadata.size > 0 && expandedNodes.size === 0) {
+      const initialExpanded = new Set<string>();
+
+      // Find root node (node with no parent) and expand it
+      convertedNodeMetadata.forEach((metadata, nodeId) => {
+        if (metadata.depth === 0) {
+          initialExpanded.add(nodeId);
+        }
+        // Also expand first level nodes
+        if (metadata.depth === 1) {
+          initialExpanded.add(nodeId);
+        }
+      });
+
+      setExpandedNodes(initialExpanded);
+    }
+  }, [convertedNodeMetadata]);
+
+  // Filter visible nodes and edges based on expanded state
+  const { visibleNodes, visibleEdges } = useMemo(() => {
+
+    if (expandedNodes.size === 0) {
+      // Show all nodes if nothing is explicitly expanded yet
+      return { visibleNodes: convertedNodes, visibleEdges: convertedEdges };
+    }
+
+    const visibleNodeIds = new Set<string>();
+
+    // Helper function to get all descendants of a node
+    const getDescendants = (nodeId: string): Set<string> => {
+      const descendants = new Set<string>();
+      convertedNodeMetadata.forEach((metadata, id) => {
+        if (metadata.parentId === nodeId) {
+          descendants.add(id);
+          if (expandedNodes.has(id)) {
+            // Recursively get descendants if this child is also expanded
+            const childDescendants = getDescendants(id);
+            childDescendants.forEach(d => descendants.add(d));
+          }
+        }
+      });
+      return descendants;
+    };
+
+    // Add root nodes (nodes with no parent)
+    convertedNodeMetadata.forEach((metadata, nodeId) => {
+      if (metadata.parentId === null) {
+        visibleNodeIds.add(nodeId);
+        // Add children if root is expanded
+        if (expandedNodes.has(nodeId)) {
+          const descendants = getDescendants(nodeId);
+          descendants.forEach(d => visibleNodeIds.add(d));
+        }
+      }
+    });
+
+
+    const filteredNodes = convertedNodes.filter(node => visibleNodeIds.has(node.id));
+    const filteredEdges = convertedEdges.filter(edge =>
+      edge.from && edge.to && visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)
+    );
+
+
+    return { visibleNodes: filteredNodes, visibleEdges: filteredEdges };
+  }, [convertedNodes, convertedEdges, convertedNodeMetadata, expandedNodes]);
+
+  const handleToggleExpand = useCallback((nodeId: string) => {
+
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+
+      // Increment key to prevent Canvas from resetting position
+      canvasKey.current += 1;
+
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    setNodes(visibleNodes);
+    setEdges(visibleEdges);
     setNodeMapping(convertedNodeMapping);
-  }, [convertedNodes, convertedEdges, convertedNodeMapping, dimensions, currentMindMap]);
+    setNodeMetadata(convertedNodeMetadata);
+  }, [visibleNodes, visibleEdges, convertedNodeMapping, convertedNodeMetadata, dimensions, currentMindMap]);
 
   const handleReset = useCallback(() => {
     if (currentMindMap?.hierarchical_data) {
-      console.log('HierarchicalMindMapDisplay: Resetting view');
 
-      const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping: newNodeMapping } = convertHierarchyToReaflow(
+      const { nodes: reaflowNodes, edges: reaflowEdges, nodeMapping: newNodeMapping, nodeMetadata: newNodeMetadata } = convertHierarchyToReaflow(
         currentMindMap.hierarchical_data
       );
       setNodes(reaflowNodes);
       setEdges(reaflowEdges);
       setNodeMapping(newNodeMapping);
+      setNodeMetadata(newNodeMetadata);
       setZoom(1);
+
+      // Reset expanded nodes to initial state (root and first level)
+      const initialExpanded = new Set<string>();
+      newNodeMetadata.forEach((metadata, nodeId) => {
+        if (metadata.depth === 0 || metadata.depth === 1) {
+          initialExpanded.add(nodeId);
+        }
+      });
+      setExpandedNodes(initialExpanded);
 
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
@@ -314,6 +521,24 @@ export function HierarchicalMindMapDisplay() {
   const handleZoomOut = useCallback(() => {
     setZoom(prev => Math.max(prev - 0.2, 0.2));
   }, []);
+
+  const handleExpandAll = useCallback(() => {
+    const allNodeIds = new Set<string>();
+    nodeMetadata.forEach((_, nodeId) => {
+      allNodeIds.add(nodeId);
+    });
+    setExpandedNodes(allNodeIds);
+  }, [nodeMetadata]);
+
+  const handleCollapseAll = useCallback(() => {
+    const rootNodes = new Set<string>();
+    nodeMetadata.forEach((metadata, nodeId) => {
+      if (metadata.depth === 0) {
+        rootNodes.add(nodeId);
+      }
+    });
+    setExpandedNodes(rootNodes);
+  }, [nodeMetadata]);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(!isFullscreen);
@@ -406,6 +631,25 @@ export function HierarchicalMindMapDisplay() {
           <Button
             variant="ghost"
             size="icon"
+            onClick={handleExpandAll}
+            className="h-10 w-10 hover:bg-primary/10 transition-colors"
+            title="Expand All Nodes"
+          >
+            <Maximize className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCollapseAll}
+            className="h-10 w-10 hover:bg-primary/10 transition-colors"
+            title="Collapse All Nodes"
+          >
+            <Minimize className="h-5 w-5" />
+          </Button>
+          <div className="h-px bg-border my-1" />
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleReset}
             className="h-10 w-10 hover:bg-primary/10 transition-colors"
             title="Reset View"
@@ -437,7 +681,7 @@ export function HierarchicalMindMapDisplay() {
       >
         <div className="flex items-center gap-2 text-sm">
           <Brain className="h-4 w-4 text-primary" />
-          <span className="font-semibold">{nodes.length}</span>
+          <span className="font-semibold">{convertedNodes.length}</span>
           <span className="text-muted-foreground">concepts</span>
         </div>
       </motion.div>
@@ -470,7 +714,6 @@ export function HierarchicalMindMapDisplay() {
 
         <Canvas
           ref={canvasRef}
-          key={`mindmap-${nodes.length}-${edges.length}`}
           nodes={nodes}
           edges={edges}
           direction="RIGHT"
@@ -501,6 +744,9 @@ export function HierarchicalMindMapDisplay() {
             <CustomNode
               {...nodeProps}
               nodeMapping={nodeMapping}
+              nodeMetadata={nodeMetadata}
+              expandedNodes={expandedNodes}
+              onToggleExpand={handleToggleExpand}
               text={nodes.find(n => n.id === nodeProps.id)?.text || 'Node'}
             />
           )}
