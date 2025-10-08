@@ -470,8 +470,8 @@ def _parse_outline_to_hierarchy(
     # Track used labels to prevent duplicates
     used_labels = {root_label.lower()}
 
-    # Stack to track current path in hierarchy
-    node_stack = [root]
+    # Stack to track current path in hierarchy: [(node, level), ...]
+    node_stack = [(root, 0)]
 
     # Process remaining lines, skipping the root line
     for line in non_empty_lines:
@@ -486,7 +486,10 @@ def _parse_outline_to_hierarchy(
         if not content:
             continue
 
-        level = (len(line) - len(content)) // 2
+        # Count spaces to determine actual indentation level
+        spaces = len(line) - len(content)
+        current_level = spaces // 2 + 1  # +1 because root is level 0
+
         label = content.strip()
 
         # Skip if this label already exists (case-insensitive)
@@ -497,21 +500,23 @@ def _parse_outline_to_hierarchy(
         used_labels.add(label.lower())
 
         # Create new node
-        node = {
+        new_node = {
             "id": str(uuid.uuid4()),
             "data": {"label": label},
             "children": [],
         }
 
-        # Adjust stack to correct level (accounting for root being level 0)
-        target_stack_size = level + 1
-        while len(node_stack) > target_stack_size:
+        # Pop stack until we find the correct parent level
+        # Parent level should be current_level - 1
+        while len(node_stack) > 1 and node_stack[-1][1] >= current_level:
             node_stack.pop()
 
-        # Add node to parent
-        if node_stack:
-            node_stack[-1]["children"].append(node)
-            node_stack.append(node)
+        # Add node to the parent (top of stack)
+        parent_node = node_stack[-1][0]
+        parent_node["children"].append(new_node)
+
+        # Push new node onto stack
+        node_stack.append((new_node, current_level))
 
     return root
 
@@ -584,29 +589,46 @@ async def _optimize_mind_map_structure(merged_outline: str) -> str:
 
     optimization_prompt = ChatPromptTemplate.from_template(
         """
-        You are a mind mapping expert. Optimize this outline for the best possible mind map experience.
+        You are a mind mapping expert. Transform this outline into a clear, hierarchical mind map structure.
 
-        **Mind Map Best Practices to Apply:**
-        1. **Remove Duplicates**: Merge identical or very similar concepts
-        2. **Consistent Terminology**: Use the same terms for the same concepts
-        3. **Optimal Hierarchy**: Maximum 4 levels, logical parent-child relationships
-        4. **Concise Labels**: 1-5 words per concept, keywords not sentences
-        5. **Logical Grouping**: Group related concepts together
-        6. **Balanced Structure**: Avoid one branch being much larger than others
-        7. **Meaningful Categories**: Ensure higher-level concepts meaningfully contain children
-        8. **No Redundancy**: Each idea appears once in the most appropriate location
+        **CRITICAL REQUIREMENTS:**
+        1. **Single Root (Level 1)**: Start with ONE main topic that summarizes the entire document
+        2. **Maximum 4 Levels**: Root → Main Branches (2-3) → Sub-branches → Details
+        3. **Concise Labels**: Use 2-4 word labels, not full sentences
+        4. **No Duplicates**: Each concept appears only once in the best location
+        5. **Balanced Structure**: Distribute content evenly across 2-3 main branches
+        6. **Logical Flow**: Group related concepts under meaningful parent categories
 
-        **Current Outline to Optimize:**
+        **Structure Template:**
+        ```
+        Document Main Topic
+          Core Concept A
+            Key Point 1
+              Detail
+            Key Point 2
+          Core Concept B
+            Key Point 3
+            Key Point 4
+          Core Concept C
+            Key Point 5
+        ```
+
+        **Current Outline:**
         {outline_content}
 
-        **Instructions:**
-        - Maintain the indented format (2 spaces per level)
-        - Keep all important information but remove duplicates
-        - Reorganize for better logical flow and balance
-        - Use clear, concise labels (prefer keywords over phrases)
-        - Ensure parent concepts meaningfully contain child concepts
-        - Maximum 4 levels of hierarchy
-        - Output ONLY the optimized outline - no explanations
+        **Optimization Steps:**
+        1. Identify the single main topic from the content
+        2. Group ALL content into 2-3 major branches (not more)
+        3. Remove ALL duplicate concepts
+        4. Use consistent, concise terminology
+        5. Keep hierarchy to exactly 4 levels maximum
+        6. Ensure each parent meaningfully contains its children
+
+        **Output Requirements:**
+        - Use ONLY 2 spaces per indentation level
+        - Start with ONE root topic (level 1)
+        - NO explanations, markdown, or extra text
+        - Output the optimized outline directly
 
         **Optimized Outline:**
         """
