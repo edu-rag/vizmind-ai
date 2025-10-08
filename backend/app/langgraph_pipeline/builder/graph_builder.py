@@ -3,7 +3,7 @@ LangGraph workflow builders for VizMind AI.
 This module creates and configures the execution graphs for document processing and RAG workflows.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -302,6 +302,9 @@ async def execute_rag_workflow(
     map_id: str,
     query: str,
     top_k: int = 10,
+    node_id: str = None,
+    node_label: str = None,
+    node_children: List[str] = None,
     config: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
@@ -312,12 +315,19 @@ async def execute_rag_workflow(
         map_id: Concept map identifier
         query: User question
         top_k: Number of documents to retrieve
+        node_id: ID of the clicked mind map node (optional, for context)
+        node_label: Label of the clicked mind map node (optional, for context)
+        node_children: List of child node labels (optional, for hierarchical context)
         config: Optional workflow configuration
 
     Returns:
         Final state of the workflow
     """
     logger.info(f"Starting RAG workflow for query: '{query[:100]}...'")
+    if node_label:
+        logger.info(f"With node context: '{node_label}'")
+        if node_children:
+            logger.info(f"Node has {len(node_children)} children")
 
     # Create initial state
     initial_state = RAGState(
@@ -325,6 +335,9 @@ async def execute_rag_workflow(
         map_id=map_id,
         query=query,
         top_k=top_k,
+        node_id=node_id,
+        node_label=node_label,
+        node_children=node_children,
         messages=[],
         retrieved_documents=None,
         filtered_documents=None,

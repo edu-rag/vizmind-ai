@@ -77,7 +77,7 @@ async def retrieve_documents_node(state: RAGState) -> RAGState:
 
 async def grade_documents_node(state: RAGState) -> RAGState:
     """
-    Node to grade retrieved documents for relevance to the query.
+    Node to grade retrieved documents for relevance to the query and node context.
     """
     logger.info("[RAG] Starting document grading")
 
@@ -99,14 +99,34 @@ async def grade_documents_node(state: RAGState) -> RAGState:
             model_name=settings.LLM_MODEL_NAME_GROQ,
         )
 
-        # Grading prompt
+        # Build context-aware grading prompt with hierarchical information
+        node_context = ""
+        if state.get("node_label"):
+            node_context = f"\n\n**Mind Map Node Context:** {state['node_label']}"
+
+            # Add children context if available (for scope understanding)
+            if state.get("node_children") and len(state["node_children"]) > 0:
+                children_list = ", ".join(
+                    state["node_children"][:5]
+                )  # Limit to first 5
+                if len(state["node_children"]) > 5:
+                    children_list += f", and {len(state['node_children']) - 5} more"
+                node_context += f"\nThis node covers subtopics: {children_list}"
+
+            node_context += "\n\nThe question is asked in the context of this specific topic from the mind map."
+
+        # Enhanced grading prompt with node context
         grading_prompt = ChatPromptTemplate.from_template(
             """
             You are a grader assessing the relevance of a retrieved document to a user question for VizMind AI.
             
             Your task is to determine if the document contains information that could help answer the question.
+            {node_context}
             
-            Give a binary score 'yes' or 'no' to indicate whether the document is relevant to the question.
+            Give a binary score 'yes' or 'no' to indicate whether the document is relevant.
+            - Answer 'yes' if the document discusses the topic or provides information helpful for answering the question
+            - Answer 'no' if the document is completely unrelated or off-topic
+            
             Provide your answer as a single word: 'yes' or 'no'.
             
             Question: {question}
@@ -126,7 +146,11 @@ async def grade_documents_node(state: RAGState) -> RAGState:
         for doc in retrieved_docs:
             try:
                 score_result = await grading_chain.ainvoke(
-                    {"question": state["query"], "document": doc.page_content}
+                    {
+                        "question": state["query"],
+                        "document": doc.page_content,
+                        "node_context": node_context,
+                    }
                 )
 
                 is_relevant = score_result.lower().strip() == "yes"
@@ -156,7 +180,7 @@ async def grade_documents_node(state: RAGState) -> RAGState:
 
 async def generate_answer_node(state: RAGState) -> RAGState:
     """
-    Node to generate the final answer using relevant documents.
+    Node to generate the final answer using relevant documents and node context.
     """
     logger.info("[RAG] Starting answer generation")
 
@@ -176,13 +200,45 @@ async def generate_answer_node(state: RAGState) -> RAGState:
             model_name=settings.LLM_MODEL_NAME_GROQ,
         )
 
-        # Enhanced answer generation prompt for VizMind AI
+        # Build node context for focused answering
+        node_context_section = ""
+        if state.get("node_label"):
+            node_context_section = f"""
+**Mind Map Node Context:**
+The user clicked on the mind map node: "{state['node_label']}"
+
+"""
+            # Add hierarchical context if children are available
+            if state.get("node_children") and len(state["node_children"]) > 0:
+                children_preview = state["node_children"][:5]  # Show first 5 children
+                children_text = ", ".join(f'"{child}"' for child in children_preview)
+                if len(state["node_children"]) > 5:
+                    children_text += (
+                        f", and {len(state['node_children']) - 5} more subtopics"
+                    )
+
+                node_context_section += f"""This node encompasses the following subtopics: {children_text}
+
+"""
+
+            node_context_section += """**Important Instructions:**
+- Focus your answer on the main node topic: "{node_label}"
+- The subtopics listed provide scope context but should NOT be detailed individually
+- Provide a cohesive answer about the main concept
+- Only mention subtopics briefly if they help explain the main concept
+- Keep the response focused and relevant to what the user is exploring
+
+""".replace(
+                "{node_label}", state["node_label"]
+            )
+
+        # Enhanced answer generation prompt for VizMind AI with node awareness
         answer_prompt = PromptTemplate.from_template(
             """
             You are an intelligent assistant for VizMind AI, a mind mapping platform that helps users understand complex documents.
             
             Your role is to provide comprehensive, accurate, and well-structured answers based on the user's document content.
-            
+            {node_context}
             **Retrieved Context from User's Document:**
             {context}
             
@@ -191,11 +247,17 @@ async def generate_answer_node(state: RAGState) -> RAGState:
             
             **Instructions:**
             1. **Answer based ONLY on the provided context** - do not use external knowledge
-            2. **Be comprehensive but concise** - provide detailed explanations while staying focused
-            3. **Structure your response** using markdown formatting (headers, bullet points, etc.)
-            4. **If context is insufficient**, clearly state what information is missing
-            5. **Be specific** - reference particular concepts, data, or examples from the context
-            6. **Maintain professional tone** suitable for educational/business contexts
+            2. **Focus on the mind map node topic** - if a node context is provided, prioritize information related to that specific concept
+            3. **Be comprehensive but concise** - provide detailed explanations while staying focused on what matters
+            4. **Structure your response** using markdown formatting:
+               - Use headers (##) for main sections
+               - Use bullet points for lists
+               - Use **bold** for key concepts
+               - Use code blocks for technical content if needed
+            5. **If context is insufficient**, clearly state what information is missing
+            6. **Be specific** - reference particular concepts, data, or examples from the context
+            7. **Connect to the node context** - if the question relates to a specific mind map node, explain how the answer connects to that concept
+            8. **Maintain professional tone** suitable for educational/business contexts
             
             **Answer:**
             """
@@ -215,7 +277,11 @@ async def generate_answer_node(state: RAGState) -> RAGState:
         # Generate answer
         answer_chain = answer_prompt | llm | StrOutputParser()
         generated_answer = await answer_chain.ainvoke(
-            {"context": context, "question": state["query"]}
+            {
+                "context": context,
+                "question": state["query"],
+                "node_context": node_context_section,
+            }
         )
 
         # Prepare citation sources
@@ -235,8 +301,14 @@ async def generate_answer_node(state: RAGState) -> RAGState:
                 }
                 cited_sources.append(source)
 
-        # Calculate confidence score based on number of relevant documents
-        confidence_score = min(1.0, len(relevant_docs) / 3.0) if relevant_docs else 0.0
+        # Calculate confidence score based on number of relevant documents and node context
+        base_confidence = min(1.0, len(relevant_docs) / 3.0) if relevant_docs else 0.0
+        # Boost confidence if node context is provided (indicates focused query)
+        if state.get("node_label"):
+            confidence_boost = 0.1
+            confidence_score = min(1.0, base_confidence + confidence_boost)
+        else:
+            confidence_score = base_confidence
 
         state["generated_answer"] = generated_answer
         state["cited_sources"] = cited_sources

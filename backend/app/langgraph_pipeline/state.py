@@ -56,6 +56,11 @@ class RAGState(TypedDict):
     query: str
     top_k: Optional[int]
 
+    # Mind map context (for focused retrieval)
+    node_id: Optional[str]
+    node_label: Optional[str]
+    node_children: Optional[List[str]]  # List of child node labels for context
+
     # Conversation history
     messages: Annotated[List[BaseMessage], add_messages]
 

@@ -3,7 +3,7 @@ VizMind AI service that orchestrates LangGraph workflows.
 This service replaces the old direct service calls with proper LangGraph workflow execution.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from bson import ObjectId
 
 from app.core.config import logger
@@ -139,7 +139,14 @@ class VizMindAIService:
             )
 
     async def query_mind_map(
-        self, user_id: str, map_id: str, query: str, top_k: int = 10
+        self,
+        user_id: str,
+        map_id: str,
+        query: str,
+        top_k: int = 10,
+        node_id: str = None,
+        node_label: str = None,
+        node_children: List[str] = None,
     ) -> NodeDetailResponse:
         """
         Query a mind map using the RAG workflow.
@@ -149,16 +156,31 @@ class VizMindAIService:
             map_id: Concept map identifier
             query: User question
             top_k: Number of documents to retrieve
+            node_id: ID of the clicked mind map node (optional, for context)
+            node_label: Label of the clicked mind map node (optional, for context)
+            node_children: List of child node labels (optional, for hierarchical context)
 
         Returns:
             NodeDetailResponse with the answer and citations
         """
         logger.info(f"[VizMindAI] Starting RAG query for user {user_id}, map {map_id}")
+        if node_label:
+            logger.info(f"[VizMindAI] Node context: {node_label}")
+            if node_children:
+                logger.info(
+                    f"[VizMindAI] Node has {len(node_children)} children: {node_children[:3]}{'...' if len(node_children) > 3 else ''}"
+                )
 
         try:
-            # Execute the RAG workflow
+            # Execute the RAG workflow with node context
             result = await execute_rag_workflow(
-                user_id=user_id, map_id=map_id, query=query, top_k=top_k
+                user_id=user_id,
+                map_id=map_id,
+                query=query,
+                top_k=top_k,
+                node_id=node_id,
+                node_label=node_label,
+                node_children=node_children,
             )
 
             # Check if RAG was successful
