@@ -95,7 +95,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-12 max-w-6xl">
-        
+
         {/* Hero Section */}
         <motion.section
           className="text-center space-y-8 mb-20 min-h-[80vh] flex flex-col justify-center"
@@ -106,19 +106,24 @@ export default function Home() {
           <motion.div variants={fadeIn} className="space-y-6">
             {/* Logo */}
             <motion.div
-              className="w-20 h-20 mx-auto gradient-ai rounded-2xl flex items-center justify-center shadow-2xl"
+              className="w-24 h-24 mx-auto gradient-ai rounded-3xl flex items-center justify-center shadow-2xl glow-ai"
               whileHover={{ scale: 1.05, rotate: 5 }}
             >
-              <Brain className="h-10 w-10 text-white" />
+              <Brain className="h-12 w-12 text-white" />
             </motion.div>
 
-            {/* Title */}
+            {/* Title with Badge */}
             <div className="space-y-4">
-              <h1 className="text-5xl md:text-6xl font-bold">
-                <span className="gradient-text">VizMind AI</span>
-              </h1>
-              <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
-                Transform documents into intelligent mind maps with AI
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold">
+                  Transform Your
+                </h1>
+                <Badge className="text-2xl md:text-3xl lg:text-4xl px-4 py-2 gradient-ai text-white font-bold">
+                  DOCS
+                </Badge>
+              </div>
+              <p className="text-base md:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto">
+                into intelligent mind maps with AI-powered insights and interactive Q&A
               </p>
             </div>
           </motion.div>
@@ -130,8 +135,8 @@ export default function Home() {
 
           {/* Quick Actions */}
           {isAuthenticated && mapHistory.length > 0 && (
-            <motion.div variants={fadeIn}>
-              <Button size="lg" className="gap-2 gradient-ai text-white" asChild>
+            <motion.div variants={fadeIn} className="flex gap-3 justify-center">
+              <Button size="lg" className="gap-2 gradient-ai text-white shadow-xl hover:shadow-2xl transition-all" asChild>
                 <a href={`/maps/${mapHistory[0].map_id}`}>
                   <BookOpen className="h-5 w-5" />
                   Open Latest Map
@@ -139,66 +144,91 @@ export default function Home() {
               </Button>
             </motion.div>
           )}
+
+          {/* Trust Badges */}
+          <motion.div variants={fadeIn} className="pt-8">
+            <p className="text-sm text-muted-foreground mb-4">Trusted by teams at</p>
+            <div className="flex items-center justify-center gap-8 flex-wrap opacity-60">
+              <div className="text-xs font-semibold tracking-wider">HARVARD</div>
+              <div className="text-xs font-semibold tracking-wider">STANFORD</div>
+              <div className="text-xs font-semibold tracking-wider">MIT</div>
+              <div className="text-xs font-semibold tracking-wider">YALE</div>
+            </div>
+          </motion.div>
         </motion.section>
 
         {/* Features - Simple 3 column */}
         <motion.section
-          className="mb-20"
+          className="mb-24"
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true }}
           variants={stagger}
         >
-          <motion.div variants={fadeIn} className="text-center mb-12">
-            <Badge className="mb-4 gradient-ai text-white">How It Works</Badge>
-            <h2 className="text-3xl md:text-4xl font-bold">
-              <span className="gradient-text">Simple & Fast</span>
+          <motion.div variants={fadeIn} className="text-center mb-16">
+            <Badge className="mb-4 text-sm px-4 py-1.5 bg-primary/10 text-primary border-primary/20">
+              How It Works
+            </Badge>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              Simple & Fast
             </h2>
+            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Transform your documents in three easy steps
+            </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             <motion.div variants={fadeIn}>
-              <Card className="p-8 text-center hover:shadow-xl transition-all group h-full">
-                <div className="w-14 h-14 gradient-ai rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                  <Upload className="h-7 w-7 text-white" />
+              <Card className="p-8 text-center hover:shadow-2xl transition-all group h-full border-2 hover:border-primary/30 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative">
+                  <div className="w-16 h-16 gradient-ai rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                    <Upload className="h-8 w-8 text-white" />
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-primary text-white font-bold mx-auto mb-4 flex items-center justify-center text-lg shadow-lg">
+                    1
+                  </div>
+                  <h3 className="text-xl font-bold mb-3">Upload Document</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Drop your PDF document and let our AI analyze it
+                  </p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-primary text-white font-bold mx-auto mb-3 flex items-center justify-center">
-                  1
-                </div>
-                <h3 className="text-lg font-bold mb-2">Upload</h3>
-                <p className="text-sm text-muted-foreground">
-                  Drop your PDF document
-                </p>
               </Card>
             </motion.div>
 
             <motion.div variants={fadeIn}>
-              <Card className="p-8 text-center hover:shadow-xl transition-all group h-full">
-                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                  <Sparkles className="h-7 w-7 text-white" />
+              <Card className="p-8 text-center hover:shadow-2xl transition-all group h-full border-2 hover:border-primary/30 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                    <Sparkles className="h-8 w-8 text-white" />
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-purple-600 text-white font-bold mx-auto mb-4 flex items-center justify-center text-lg shadow-lg">
+                    2
+                  </div>
+                  <h3 className="text-xl font-bold mb-3">AI Processing</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Advanced AI extracts key concepts automatically
+                  </p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-purple-600 text-white font-bold mx-auto mb-3 flex items-center justify-center">
-                  2
-                </div>
-                <h3 className="text-lg font-bold mb-2">AI Processing</h3>
-                <p className="text-sm text-muted-foreground">
-                  AI extracts concepts automatically
-                </p>
               </Card>
             </motion.div>
 
             <motion.div variants={fadeIn}>
-              <Card className="p-8 text-center hover:shadow-xl transition-all group h-full">
-                <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                  <Network className="h-7 w-7 text-white" />
+              <Card className="p-8 text-center hover:shadow-2xl transition-all group h-full border-2 hover:border-primary/30 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative">
+                  <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                    <Network className="h-8 w-8 text-white" />
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white font-bold mx-auto mb-4 flex items-center justify-center text-lg shadow-lg">
+                    3
+                  </div>
+                  <h3 className="text-xl font-bold mb-3">Explore & Chat</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Navigate mind maps and ask intelligent questions
+                  </p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-green-600 text-white font-bold mx-auto mb-3 flex items-center justify-center">
-                  3
-                </div>
-                <h3 className="text-lg font-bold mb-2">Explore</h3>
-                <p className="text-sm text-muted-foreground">
-                  Navigate and ask questions
-                </p>
               </Card>
             </motion.div>
           </div>
@@ -206,46 +236,57 @@ export default function Home() {
 
         {/* Key Features - 3 most important */}
         <motion.section
-          className="mb-20"
+          className="mb-24"
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true }}
           variants={stagger}
         >
-          <motion.div variants={fadeIn} className="text-center mb-12">
-            <Badge className="mb-4 gradient-ai text-white">Features</Badge>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+          <motion.div variants={fadeIn} className="text-center mb-16">
+            <Badge className="mb-4 text-sm px-4 py-1.5 bg-primary/10 text-primary border-primary/20">
+              Features
+            </Badge>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
               Everything you need
             </h2>
+            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Powerful AI features to enhance your document workflow
+            </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             <motion.div variants={fadeIn}>
-              <Card className="p-6 hover:shadow-xl transition-all group h-full">
-                <Brain className="h-10 w-10 text-primary mb-4" />
-                <h3 className="text-xl font-bold mb-2">AI-Powered</h3>
-                <p className="text-muted-foreground">
-                  Automatically extract and organize concepts from your documents
+              <Card className="p-8 hover:shadow-2xl transition-all group h-full border-2 hover:border-primary/30">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <Brain className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="text-xl font-bold mb-3">AI-Powered Analysis</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Automatically extract and organize key concepts from your documents with advanced AI
                 </p>
               </Card>
             </motion.div>
 
             <motion.div variants={fadeIn}>
-              <Card className="p-6 hover:shadow-xl transition-all group h-full">
-                <MessageSquare className="h-10 w-10 text-primary mb-4" />
-                <h3 className="text-xl font-bold mb-2">Interactive Q&A</h3>
-                <p className="text-muted-foreground">
-                  Ask questions and get instant AI-powered answers with sources
+              <Card className="p-8 hover:shadow-2xl transition-all group h-full border-2 hover:border-primary/30">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="text-xl font-bold mb-3">Interactive Q&A</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Ask questions and get instant AI-powered answers with accurate source references
                 </p>
               </Card>
             </motion.div>
 
             <motion.div variants={fadeIn}>
-              <Card className="p-6 hover:shadow-xl transition-all group h-full">
-                <Network className="h-10 w-10 text-primary mb-4" />
-                <h3 className="text-xl font-bold mb-2">Visual Mapping</h3>
-                <p className="text-muted-foreground">
-                  Navigate hierarchical relationships with beautiful mind maps
+              <Card className="p-8 hover:shadow-2xl transition-all group h-full border-2 hover:border-primary/30">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <Network className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="text-xl font-bold mb-3">Visual Mind Maps</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Navigate hierarchical relationships with beautiful, interactive mind maps
                 </p>
               </Card>
             </motion.div>
@@ -255,15 +296,22 @@ export default function Home() {
         {/* Recent Maps */}
         {isAuthenticated && mapHistory.length > 0 && (
           <motion.section
-            className="mb-20"
+            className="mb-24"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
             variants={stagger}
           >
-            <motion.div variants={fadeIn} className="text-center mb-12">
-              <Badge className="mb-4 gradient-ai text-white">Your Maps</Badge>
-              <h2 className="text-3xl md:text-4xl font-bold">Recent Mind Maps</h2>
+            <motion.div variants={fadeIn} className="text-center mb-16">
+              <Badge className="mb-4 text-sm px-4 py-1.5 bg-primary/10 text-primary border-primary/20">
+                Your Maps
+              </Badge>
+              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+                Recent Mind Maps
+              </h2>
+              <p className="text-base md:text-lg text-muted-foreground">
+                Quick access to your latest documents
+              </p>
             </motion.div>
 
             <div className="grid md:grid-cols-3 gap-6">
@@ -279,7 +327,7 @@ export default function Home() {
                     onClick={async () => {
                       const { jwt } = useAppStore.getState();
                       if (!jwt) return;
-                      
+
                       try {
                         const result = await getHierarchicalMindMap(item.map_id, jwt);
                         if (result.data) {
@@ -350,23 +398,35 @@ export default function Home() {
           viewport={{ once: true }}
           variants={fadeIn}
         >
-          <Card className="max-w-3xl mx-auto p-12 text-center relative overflow-hidden border-2">
-            <div className="absolute inset-0 gradient-ai-subtle opacity-50" />
-            <div className="relative space-y-6">
-              <h2 className="text-3xl md:text-4xl font-bold">
-                Ready to get started?
-              </h2>
-              <p className="text-lg text-muted-foreground">
-                Transform your documents into intelligent mind maps today
-              </p>
-              <Button
-                size="lg"
-                className="gap-2 gradient-ai text-white"
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              >
-                <Upload className="h-5 w-5" />
-                Upload Your First Document
-              </Button>
+          <Card className="max-w-4xl mx-auto p-12 md:p-16 text-center relative overflow-hidden border-2 shadow-2xl">
+            <div className="absolute inset-0 gradient-ai opacity-5" />
+            <div className="relative space-y-8">
+              <div className="space-y-4">
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold">
+                  Ready to get started?
+                </h2>
+                <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Transform your documents into intelligent mind maps today. Upload your first PDF and experience the power of AI.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  size="lg"
+                  className="gap-2 gradient-ai text-white shadow-xl hover:shadow-2xl transition-all text-base"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
+                  <Upload className="h-5 w-5" />
+                  Upload Your First Document
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="gap-2 text-base"
+                >
+                  <BookOpen className="h-5 w-5" />
+                  Learn More
+                </Button>
+              </div>
             </div>
           </Card>
         </motion.section>
