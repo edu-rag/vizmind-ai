@@ -144,17 +144,6 @@ export default function Home() {
               </Button>
             </motion.div>
           )}
-
-          {/* Trust Badges */}
-          <motion.div variants={fadeIn} className="pt-8">
-            <p className="text-sm text-muted-foreground mb-4">Trusted by teams at</p>
-            <div className="flex items-center justify-center gap-8 flex-wrap opacity-60">
-              <div className="text-xs font-semibold tracking-wider">HARVARD</div>
-              <div className="text-xs font-semibold tracking-wider">STANFORD</div>
-              <div className="text-xs font-semibold tracking-wider">MIT</div>
-              <div className="text-xs font-semibold tracking-wider">YALE</div>
-            </div>
-          </motion.div>
         </motion.section>
 
         {/* Features - Simple 3 column */}
