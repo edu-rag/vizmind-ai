@@ -152,12 +152,16 @@ export function HistorySidebar() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    // Parse the UTC timestamp from the API (format: "2025-10-08T17:33:49.109000")
+    // The API returns UTC time without 'Z' suffix, so we need to add it for proper parsing
+    const utcDateString = dateString.endsWith('Z') ? dateString : `${dateString}Z`;
+    const date = new Date(utcDateString);
+
     const now = new Date();
     const diffInHours = Math.abs(now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
     if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     } else if (diffInHours < 168) {
       return date.toLocaleDateString([], { weekday: 'short' });
     } else {
