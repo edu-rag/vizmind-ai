@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import List
-from bson import ObjectId
+from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 
 from app.db.mongodb_utils import get_chat_collection
@@ -29,79 +29,45 @@ class ChatService:
     ) -> ChatHistoryResponse:
         """Save a message to the chat conversation."""
         try:
-            # Find existing conversation or create new one
+            # Atomically upsert conversation to prevent duplicate key errors
             conversation_filter = {
                 "user_id": user_id,
                 "map_id": map_id,
                 "node_id": node_id,
-                "is_deleted": False,
             }
 
-            existing_conversation = self.chat_collection.find_one(conversation_filter)
+            now = datetime.now(timezone.utc)
+            message_dict = message.model_dump()
 
-            if existing_conversation:
-                # Update existing conversation
-                result = self.chat_collection.update_one(
-                    {"_id": existing_conversation["_id"]},
-                    {
-                        "$push": {"messages": message.model_dump()},
-                        "$set": {
-                            "updated_at": datetime.now(timezone.utc),
-                            "node_label": node_label,  # Update in case it changed
-                        },
+            conversation_doc = self.chat_collection.find_one_and_update(
+                conversation_filter,
+                {
+                    "$push": {"messages": message_dict},
+                    "$set": {
+                        "node_label": node_label,
+                        "updated_at": now,
+                        "is_deleted": False,
                     },
+                    "$setOnInsert": {
+                        "created_at": now,
+                    },
+                },
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+            )
+
+            if conversation_doc:
+                logger.info(
+                    f"Message saved for conversation: {conversation_doc['_id']}"
+                )
+                return ChatHistoryResponse(
+                    success=True,
+                    message="Message saved successfully",
+                    conversation_id=str(conversation_doc["_id"]),
                 )
 
-                if result.modified_count > 0:
-                    logger.info(
-                        f"Message added to existing conversation: {existing_conversation['_id']}"
-                    )
-                    return ChatHistoryResponse(
-                        success=True,
-                        message="Message saved successfully",
-                        conversation_id=str(existing_conversation["_id"]),
-                    )
-                else:
-                    logger.error(
-                        f"Failed to update conversation: {existing_conversation['_id']}"
-                    )
-                    return ChatHistoryResponse(
-                        success=False, message="Failed to save message"
-                    )
-            else:
-                # Create new conversation
-                conversation_id = str(ObjectId())
-                new_conversation = ChatConversation(
-                    id=conversation_id,
-                    map_id=map_id,
-                    node_id=node_id,
-                    node_label=node_label,
-                    user_id=user_id,
-                    messages=[message],
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
-                    is_deleted=False,
-                )
-
-                # Convert to dict and set _id
-                conversation_dict = new_conversation.model_dump()
-                conversation_dict["_id"] = ObjectId(conversation_id)
-                del conversation_dict["id"]  # Remove the id field since we're using _id
-
-                result = self.chat_collection.insert_one(conversation_dict)
-
-                if result.inserted_id:
-                    logger.info(f"New conversation created: {result.inserted_id}")
-                    return ChatHistoryResponse(
-                        success=True,
-                        message="New conversation created and message saved",
-                        conversation_id=str(result.inserted_id),
-                    )
-                else:
-                    logger.error("Failed to create new conversation")
-                    return ChatHistoryResponse(
-                        success=False, message="Failed to create conversation"
-                    )
+            logger.error("Failed to save conversation document")
+            return ChatHistoryResponse(success=False, message="Failed to save message")
 
         except PyMongoError as e:
             logger.error(f"Database error saving message: {e}")
