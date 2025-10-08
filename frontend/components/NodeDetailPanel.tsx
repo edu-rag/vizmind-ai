@@ -589,7 +589,7 @@ export function NodeDetailPanel() {
                   </div>
 
                   {/* Right Column: Chat */}
-                  <div className="w-[550px] xl:w-[600px] flex flex-col h-full border-l-2 border-border/50 pl-6 pb-16">
+                  <div className="w-[550px] xl:w-[600px] flex flex-col h-full border-l-2 border-border/50 pl-6 pb-2">
                     <div className="flex items-center justify-between mb-4 sticky top-0 z-10 bg-background pb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-10 h-10 gradient-ai rounded-xl flex items-center justify-center shadow-md">
