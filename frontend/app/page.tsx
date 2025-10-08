@@ -190,7 +190,7 @@ export default function Home() {
                   </div>
                   <h3 className="text-xl font-bold mb-3">Upload Document</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Drop your PDF document and let our AI analyze it
+                    Drop a single PDF document and let our AI analyze it
                   </p>
                 </div>
               </Card>

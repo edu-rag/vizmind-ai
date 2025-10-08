@@ -141,8 +141,8 @@ export function FileDropZone() {
     }, 500);
 
     try {
-      toast.success(`Processing ${files.length} PDF${files.length > 1 ? 's' : ''}...`, {
-        description: files.length > 1 ? 'Creating mind map from first file' : 'Creating hierarchical mind map',
+      toast.success(`Processing PDF...`, {
+        description: 'Creating mind map',
       });
 
       const result = await generateHierarchicalMindMap(files[0], jwt);
@@ -176,9 +176,7 @@ export function FileDropZone() {
         setTimeout(() => setShowConfetti(false), 5000);
 
         toast.success('Hierarchical mind map created!', {
-          description: files.length > 1
-            ? `Processed ${files[0].name}. Multiple file support coming soon.`
-            : 'Your document has been transformed into an interactive mind map',
+          description: 'Your document has been transformed into an interactive mind map',
         });
 
         // Navigate to view the map
@@ -300,9 +298,11 @@ export function FileDropZone() {
         setShowAuthDialog(true);
         return;
       }
-      addFilesAsPending(acceptedFiles);
-      toast.success(`Added ${acceptedFiles.length} file${acceptedFiles.length > 1 ? 's' : ''} to queue`, {
-        description: 'Click "Process All" to create your concept map',
+      // Only process the first file since multiple is false
+      const file = acceptedFiles[0];
+      addFilesAsPending([file]);
+      toast.success('File added to queue', {
+        description: 'Click "Process" to create your mind map',
       });
     }
   }, [isAuthenticated]);
@@ -314,7 +314,7 @@ export function FileDropZone() {
     accept: {
       'application/pdf': ['.pdf'],
     },
-    multiple: true,
+    multiple: false,
     maxSize: 10 * 1024 * 1024, // 10MB
     disabled: false,
   });
@@ -549,7 +549,7 @@ export function FileDropZone() {
                     <p className="text-sm md:text-base text-muted-foreground max-w-md mx-auto leading-relaxed">
                       {isDragReject
                         ? 'Only PDF files up to 10MB are supported'
-                        : 'Upload multiple PDFs to create a unified concept map. All documents will be analyzed together to find connections and relationships across your content.'
+                        : 'Upload a PDF document to create an intelligent mind map. Our AI will analyze and extract key concepts and relationships.'
                       }
                     </p>
                   </div>
@@ -563,14 +563,14 @@ export function FileDropZone() {
                       className="px-6 md:px-8 py-3 font-medium gradient-ai text-white hover:opacity-90 shadow-lg transition-all"
                     >
                       <Plus className="mr-2 h-4 w-4 md:h-5 md:w-5" />
-                      Choose PDF Files
+                      Choose PDF File
                     </Button>
                   </motion.div>
 
                   <div className="flex items-center justify-center space-x-3 text-xs md:text-sm text-muted-foreground">
                     <Badge variant="secondary" className="text-xs">PDF only</Badge>
                     <Badge variant="secondary" className="text-xs">Max 10MB</Badge>
-                    <Badge variant="secondary" className="text-xs">Multiple files</Badge>
+                    <Badge variant="secondary" className="text-xs">Single file</Badge>
                   </div>
                 </motion.div>
               </div>
@@ -591,10 +591,10 @@ export function FileDropZone() {
             >
               <Card className="p-4 md:p-6 border-2">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="space-y-4">
                     <h4 className="text-lg font-semibold text-foreground flex items-center gap-2">
                       <FileText className="h-5 w-5 text-primary" />
-                      Uploaded Files ({uploadedFiles.length})
+                      Uploaded File
                     </h4>
                     <div className="flex gap-2">
                       {uploadedFiles.some(f => f.status === 'pending') && (
@@ -620,7 +620,7 @@ export function FileDropZone() {
                             className="gradient-ai text-white hover:opacity-90 shadow-md"
                           >
                             <Sparkles className="mr-2 h-4 w-4" />
-                            Process All ({uploadedFiles.filter(f => f.status === 'pending').length})
+                            Process File
                           </Button>
                         </motion.div>
                       )}
@@ -630,7 +630,7 @@ export function FileDropZone() {
                         onClick={() => setUploadedFiles([])}
                         className="text-muted-foreground hover:text-foreground"
                       >
-                        Clear All
+                        Clear
                       </Button>
                     </div>
                   </div>
