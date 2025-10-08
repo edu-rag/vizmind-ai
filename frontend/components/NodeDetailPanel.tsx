@@ -71,6 +71,11 @@ export function NodeDetailPanel() {
 
     const nodeQuery = `What is ${selectedNodeData.data.label}? Provide detailed information about this concept.`;
 
+    // Extract children labels from the selected node
+    const nodeChildren = selectedNodeData.children
+      ? selectedNodeData.children.map((child: any) => child.data.label)
+      : undefined;
+
     isLoadingRef.current = true;
     setIsLoading(true);
 
@@ -80,7 +85,8 @@ export function NodeDetailPanel() {
         nodeQuery,
         jwt,
         selectedNodeData.id,
-        selectedNodeData.data.label
+        selectedNodeData.data.label,
+        nodeChildren
       );
 
       if (result.data) {
@@ -171,6 +177,11 @@ export function NodeDetailPanel() {
   const handleAskQuestion = useCallback(async (questionText: string) => {
     if (!currentMindMap || !jwt || !selectedNodeData) return;
 
+    // Extract children labels from the selected node
+    const nodeChildren = selectedNodeData.children
+      ? selectedNodeData.children.map((child: any) => child.data.label)
+      : undefined;
+
     // Set the current question immediately and start loading
     setCurrentQuestion(questionText);
     setIsAsking(true);
@@ -181,7 +192,8 @@ export function NodeDetailPanel() {
         questionText,
         jwt,
         selectedNodeData.id,
-        selectedNodeData.data.label
+        selectedNodeData.data.label,
+        nodeChildren
       );
 
       if (result.data) {

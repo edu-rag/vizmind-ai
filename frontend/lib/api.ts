@@ -225,6 +225,7 @@ export const askQuestionWithHistory = async (
   jwt: string,
   nodeId?: string,
   nodeLabel?: string,
+  nodeChildren?: string[],
   topK: number = 5
 ) => {
   return makeRequest<NodeDetailResponse>(`/api/v1/chat`, {
@@ -234,6 +235,7 @@ export const askQuestionWithHistory = async (
       question: question,
       node_id: nodeId,
       node_label: nodeLabel,
+      node_children: nodeChildren,
       top_k: topK,
     }),
   }, jwt);
