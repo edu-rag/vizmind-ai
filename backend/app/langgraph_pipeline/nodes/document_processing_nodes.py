@@ -582,53 +582,36 @@ async def _optimize_mind_map_structure(merged_outline: str) -> str:
 
     # Initialize LLM for optimization
     llm = ChatGroq(
-        temperature=0.1,  # Slightly higher for creative reorganization
+        temperature=1,  # Slightly higher for creative reorganization
         groq_api_key=settings.GROQ_API_KEY,
         model_name=settings.LLM_MODEL_NAME_GROQ,
     )
 
     optimization_prompt = ChatPromptTemplate.from_template(
         """
-        You are a mind mapping expert. Transform this outline into a clear, hierarchical mind map structure.
+        You are a mind mapping expert. Your task is to transform the provided messy outline into a perfectly structured and optimized mind map.
 
-        **CRITICAL REQUIREMENTS:**
-        1. **Single Root (Level 1)**: Start with ONE main topic that summarizes the entire document
-        2. **Maximum 4 Levels**: Root → Main Branches (2-3) → Sub-branches → Details
-        3. **Concise Labels**: Use 2-4 word labels, not full sentences
-        4. **No Duplicates**: Each concept appears only once in the best location
-        5. **Balanced Structure**: Distribute content evenly across 2-3 main branches
-        6. **Logical Flow**: Group related concepts under meaningful parent categories
+        **Mind Map Best Practices to Apply:**
+        1.  **Merge Duplicates**: Combine identical or very similar concepts.
+        2.  **Consistent Terminology**: Use the same terms for the same concepts.
+        3.  **Optimal Hierarchy**: Create a logical parent-child structure, up to a maximum of 4 levels.
+        4.  **Concise Labels**: Use 1-5 keywords per node, not full sentences.
+        5.  **Logical Grouping**: Group related concepts together under meaningful parent nodes.
+        6.  **Balanced Structure**: Avoid making one branch excessively larger than others.
+        7.  **No Redundancy**: Ensure each idea appears only once in its most appropriate location.
 
-        **Structure Template:**
+        **Outline to Optimize:**
         ```
-        Document Main Topic
-          Core Concept A
-            Key Point 1
-              Detail
-            Key Point 2
-          Core Concept B
-            Key Point 3
-            Key Point 4
-          Core Concept C
-            Key Point 5
-        ```
-
-        **Current Outline:**
         {outline_content}
+        ```
 
-        **Optimization Steps:**
-        1. Identify the single main topic from the content
-        2. Group ALL content into 2-3 major branches (not more)
-        3. Remove ALL duplicate concepts
-        4. Use consistent, concise terminology
-        5. Keep hierarchy to exactly 4 levels maximum
-        6. Ensure each parent meaningfully contains its children
-
-        **Output Requirements:**
-        - Use ONLY 2 spaces per indentation level
-        - Start with ONE root topic (level 1)
-        - NO explanations, markdown, or extra text
-        - Output the optimized outline directly
+        **Instructions:**
+        - Identify the single most important theme or conclusion from the outline and make it the Level 1 central topic.
+        - Reorganize all other information into a logical hierarchy under this central topic.
+        - Structure the main branches (Level 2) to create a clear, logical flow (e.g., Problem -> Solution -> Results).
+        - Strictly adhere to all the mind map best practices listed above.
+        - Use an indented format (2 spaces per level).
+        - Output ONLY the optimized outline. Do not write any explanations or introductory text.
 
         **Optimized Outline:**
         """
