@@ -720,3 +720,25 @@
 .stagger-item:nth-child(6) {
   animation-delay: 0.6s;
 }
+
+/* Custom text selection styles for NodeDetailPanel */
+.selectable-content ::selection {
+  background-color: hsl(var(--primary) / 0.25);
+  color: inherit;
+}
+
+.selectable-content ::-moz-selection {
+  background-color: hsl(var(--primary) / 0.25);
+  color: inherit;
+}
+
+/* Dark mode selection */
+.dark .selectable-content ::selection {
+  background-color: hsl(var(--primary) / 0.35);
+  color: inherit;
+}
+
+.dark .selectable-content ::-moz-selection {
+  background-color: hsl(var(--primary) / 0.35);
+  color: inherit;
+}

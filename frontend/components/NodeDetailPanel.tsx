@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -77,9 +77,14 @@ export function NodeDetailPanel() {
   const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [isMobile, setIsMobile] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
+  const [selectedText, setSelectedText] = useState('');
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const questionInputRef = useRef<HTMLInputElement>(null);
   const isLoadingRef = useRef(false);
+  const detailsContentRef = useRef<HTMLDivElement>(null);
+  const selectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSelectingRef = useRef(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -206,15 +211,6 @@ export function NodeDetailPanel() {
   const handleAskQuestion = useCallback(async (questionText: string) => {
     if (!currentMindMap || !jwt || !selectedNodeData) return;
 
-    // Extract children labels from the selected node
-    const nodeChildren = selectedNodeData.children
-      ? selectedNodeData.children.map((child: any) => child.data.label)
-      : undefined;
-
-    // Extract parent label by traversing the hierarchy
-    const nodeParent = findParentLabel(currentMindMap.hierarchical_data, selectedNodeData.id);
-
-    // Set the current question immediately and start loading
     setCurrentQuestion(questionText);
     setIsAsking(true);
 
@@ -225,8 +221,6 @@ export function NodeDetailPanel() {
         jwt,
         selectedNodeData.id,
         selectedNodeData.data.label,
-        nodeParent,
-        nodeChildren
       );
 
       if (result.data) {
@@ -250,6 +244,143 @@ export function NodeDetailPanel() {
     }
   }, [currentMindMap, jwt, selectedNodeData]);
 
+  // Handle text selection - optimized to prevent unnecessary re-renders
+  useEffect(() => {
+    const handleTextSelection = (e: Event) => {
+      // Clear any pending timeout
+      if (selectionTimeoutRef.current) {
+        clearTimeout(selectionTimeoutRef.current);
+      }
+
+      // Small delay to ensure selection is complete
+      selectionTimeoutRef.current = setTimeout(() => {
+        const selection = window.getSelection();
+        const text = selection?.toString().trim();
+
+        if (text && text.length > 0) {
+          const range = selection?.getRangeAt(0);
+          const rect = range?.getBoundingClientRect();
+
+          if (rect) {
+            isSelectingRef.current = true;
+            // Only update state when we have valid selection
+            setSelectedText(text);
+            setTooltipPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top - 10
+            });
+          }
+        }
+      }, 10);
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't clear if clicking on tooltip
+      if (target.closest('.selection-tooltip')) {
+        return;
+      }
+
+      // Clear tooltip if clicking outside and no text is selected
+      if (isSelectingRef.current) {
+        setTimeout(() => {
+          const currentSelection = window.getSelection();
+          if (!currentSelection || currentSelection.toString().trim().length === 0) {
+            isSelectingRef.current = false;
+            setSelectedText('');
+            setTooltipPosition(null);
+          }
+        }, 50);
+      }
+    };
+
+    document.addEventListener('mouseup', handleTextSelection);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mouseup', handleTextSelection);
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (selectionTimeoutRef.current) {
+        clearTimeout(selectionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Shared markdown components for DRY principle
+  const markdownComponents = useMemo(() => ({
+    h1: ({ children }: any) => <h1 className="text-xl font-bold mb-3 gradient-text select-text">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-lg font-semibold mb-2 text-foreground select-text">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-base font-medium mb-2 text-foreground select-text">{children}</h3>,
+    p: ({ children }: any) => <p className="mb-3 text-foreground leading-relaxed select-text">{children}</p>,
+    ul: ({ children }: any) => <ul className="list-disc ml-5 mb-3 space-y-1 select-text">{children}</ul>,
+    ol: ({ children }: any) => <ol className="list-decimal ml-5 mb-3 space-y-1 select-text">{children}</ol>,
+    li: ({ children }: any) => <li className="text-foreground select-text">{children}</li>,
+    strong: ({ children }: any) => {
+      const text = typeof children === 'string' ? children : String(children);
+      return (
+        <strong
+          className="font-semibold text-primary cursor-pointer select-text"
+          onMouseEnter={(e) => handleBoldHover(e, text)}
+          onMouseLeave={handleBoldLeave}
+        >
+          {children}
+        </strong>
+      );
+    },
+    em: ({ children }: any) => <em className="italic text-foreground select-text">{children}</em>,
+    code: ({ children }: any) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono select-text">{children}</code>,
+    blockquote: ({ children }: any) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground mb-3 select-text">{children}</blockquote>,
+  }), []);
+
+  const handleAskAboutSelection = useCallback(async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    if (!selectedText) return;
+
+    const questionText = `Tell me more about "${selectedText}"`;
+
+    // Clear selection and tooltip
+    setSelectedText('');
+    setTooltipPosition(null);
+
+    // Clear the browser selection
+    window.getSelection()?.removeAllRanges();
+
+    // Switch to chat tab on mobile
+    if (isMobile) {
+      setActiveTab('chat');
+    }
+
+    await handleAskQuestion(questionText);
+  }, [selectedText, handleAskQuestion, setActiveTab, isMobile]);
+
+  // Handle bold text hover (show tooltip)
+  const handleBoldHover = useCallback((e: React.MouseEvent, text: string) => {
+    e.stopPropagation();
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setSelectedText(text);
+    setTooltipPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top - 10
+    });
+  }, []);
+
+  // Handle bold text mouse leave (hide tooltip only if not hovering on tooltip)
+  const handleBoldLeave = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Delay to allow mouse to move to tooltip
+    setTimeout(() => {
+      const hoveredElement = document.elementFromPoint(e.clientX, e.clientY);
+      if (!hoveredElement?.closest('.selection-tooltip')) {
+        setSelectedText('');
+        setTooltipPosition(null);
+      }
+    }, 100);
+  }, []);
+
   const handleSubmitQuestion = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
@@ -261,7 +392,6 @@ export function NodeDetailPanel() {
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
-      setDetailPanelOpen(false);
       setTimeout(() => {
         setQuestion('');
         isLoadingRef.current = false;
@@ -273,342 +403,649 @@ export function NodeDetailPanel() {
   }, [setDetailPanelOpen]);
 
   return (
-    <Drawer handleOnly={false} open={isDetailPanelOpen} onOpenChange={handleOpenChange}>
-      <DrawerContent className={cn(
-        'h-[95vh] max-h-[95vh]',
-        isMobile && 'h-[95vh] max-h-[95vh]'
-      )}>
-        <div className="mx-auto w-full max-w-4xl h-full flex flex-col">
+    <>
+      {/* Text Selection Tooltip */}
+      <AnimatePresence>
+        {selectedText && tooltipPosition && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            transition={{ duration: 0.15 }}
+            className="selection-tooltip fixed z-[9999] pointer-events-auto"
+            style={{
+              left: `${tooltipPosition.x}px`,
+              top: `${tooltipPosition.y}px`,
+              transform: 'translate(-50%, -100%)',
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseLeave={() => {
+              // Hide tooltip when mouse leaves the tooltip area
+              setTimeout(() => {
+                setSelectedText('');
+                setTooltipPosition(null);
+              }, 100);
+            }}
+          >
+            <Button
+              onClick={handleAskAboutSelection}
+              onMouseDown={(e) => e.stopPropagation()}
+              size="sm"
+              className="gradient-ai text-white shadow-lg hover:shadow-xl transition-all gap-2 whitespace-nowrap"
+            >
+              <Sparkles className="h-3 w-3" />
+              Ask VizmindAI
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          <DrawerHeader className="px-6 pt-2 pb-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <DrawerTitle className="text-2xl font-bold flex items-center gap-3 mb-2">
-                  <motion.div
-                    className="w-10 h-10 gradient-ai rounded-xl flex items-center justify-center shadow-lg"
-                    animate={{ rotate: [0, 5, -5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-                  >
-                    <Sparkles className="h-5 w-5 text-white" />
-                  </motion.div>
-                  <span className="gradient-text truncate">
-                    {selectedNodeData?.data.label}
-                  </span>
-                </DrawerTitle>
-                <DrawerDescription className="text-base">
-                  Explore this concept with AI-powered insights
-                </DrawerDescription>
+      <Drawer handleOnly={false} open={isDetailPanelOpen} onOpenChange={handleOpenChange}>
+        <DrawerContent className={cn(
+          'h-[95vh] max-h-[95vh]',
+          isMobile && 'h-[95vh] max-h-[95vh]'
+        )}>
+          <div className={cn(
+            "mx-auto w-full h-full flex flex-col",
+            isMobile ? "max-w-4xl" : "max-w-[90vw] lg:max-w-[85vw]"
+          )}>
+
+            <DrawerHeader className="px-6 pt-2 pb-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <DrawerTitle className="text-2xl font-bold flex items-center gap-3 mb-2">
+                    <motion.div
+                      className="w-10 h-10 gradient-ai rounded-xl flex items-center justify-center shadow-lg"
+                      animate={{ rotate: [0, 5, -5, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                    >
+                      <Sparkles className="h-5 w-5 text-white" />
+                    </motion.div>
+                    <span className="gradient-text truncate">
+                      {selectedNodeData?.data.label}
+                    </span>
+                  </DrawerTitle>
+                  <DrawerDescription className="text-base">
+                    Explore this concept with AI-powered insights
+                  </DrawerDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    handleOpenChange(false);
+                    setDetailPanelOpen(false);
+                  }}
+                  className="flex-shrink-0"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleOpenChange(false)}
-                className="flex-shrink-0"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-          </DrawerHeader>
+            </DrawerHeader>
 
 
-          <div className="flex-1 overflow-hidden px-6 pb-8">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-              <TabsList className="grid w-full grid-cols-2 mb-4 sticky top-0 z-10 bg-background">
-                <TabsTrigger value="details" className="gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  Details
-                </TabsTrigger>
-                <TabsTrigger value="chat" className="gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Chat
-                  {lastQuestionAnswer && (
-                    <Badge variant="secondary" className="ml-2 text-xs">1</Badge>
-                  )}
-                </TabsTrigger>
-              </TabsList>
-
-              <div className="flex-1 overflow-hidden">
-                <TabsContent value="details" className="h-full mt-0">
-                  <ScrollArea className="h-full pr-4">
-                    <div className="space-y-6 pb-6">
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        {isLoading ? (
-                          <Card className="p-6 gradient-ai-subtle border-2">
-                            <div className="space-y-3">
-                              <Skeleton className="h-4 w-full" />
-                              <Skeleton className="h-4 w-full" />
-                              <Skeleton className="h-4 w-3/4" />
-                            </div>
-                          </Card>
-                        ) : initialAnswer ? (
-                          <Card className="p-6 border-2 hover:border-primary/30 transition-colors">
-                            <div className="prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown
-                                components={{
-                                  h1: ({ children }) => <h1 className="text-xl font-bold mb-3 gradient-text">{children}</h1>,
-                                  h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-foreground">{children}</h2>,
-                                  h3: ({ children }) => <h3 className="text-base font-medium mb-2 text-foreground">{children}</h3>,
-                                  p: ({ children }) => <p className="mb-3 text-foreground leading-relaxed">{children}</p>,
-                                  ul: ({ children }) => <ul className="list-disc ml-5 mb-3 space-y-1">{children}</ul>,
-                                  ol: ({ children }) => <ol className="list-decimal ml-5 mb-3 space-y-1">{children}</ol>,
-                                  li: ({ children }) => <li className="text-foreground">{children}</li>,
-                                  strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
-                                  em: ({ children }) => <em className="italic text-foreground">{children}</em>,
-                                  code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>,
-                                  blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
-                                }}
-                              >
-                                {initialAnswer}
-                              </ReactMarkdown>
-                            </div>
-                          </Card>
-                        ) : (
-                          <Card className="p-6 text-center gradient-ai-subtle border-2">
-                            <Sparkles className="h-12 w-12 mx-auto mb-3 text-primary" />
-                            <p className="text-muted-foreground">
-                              No details available yet. Switch to Chat to ask questions!
-                            </p>
-                          </Card>
-                        )}
-                      </motion.div>
-
-                      {initialCitedSources.length > 0 && (
+            <div className="flex-1 overflow-hidden px-6 pb-8">
+              {/* Desktop: Two-column layout, Mobile: Tabs */}
+              {!isMobile ? (
+                <div className="h-full flex gap-6 pt-6 pb-4">
+                  {/* Left Column: Details */}
+                  <div className="flex-1 flex flex-col h-full min-w-0">
+                    <div className="flex items-center gap-2 mb-4 sticky top-0 z-10 pb-2">
+                      <BookOpen className="h-5 w-5 text-primary" />
+                      <h3 className="text-lg font-semibold">Details</h3>
+                    </div>
+                    <ScrollArea className="flex-1 pr-4">
+                      <div className="space-y-6 pb-6">
                         <motion.div
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: 0.1 }}
+                          transition={{ duration: 0.3 }}
                         >
-                          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                            <BookOpen className="h-5 w-5 text-primary" />
-                            Sources
-                          </h3>
-                          <div className="space-y-3">
-                            {initialCitedSources.map((source, index) => (
-                              <motion.div
-                                key={index}
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.2, delay: index * 0.05 }}
-                              >
-                                <Card className="p-4 hover:shadow-lg hover:border-primary/30 transition-all">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1">
-                                      <h4 className="font-medium text-foreground mb-1">
-                                        {source.title}
-                                      </h4>
+                          {isLoading ? (
+                            <Card className="p-6 gradient-ai-subtle border-2">
+                              <div className="space-y-3">
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-3/4" />
+                              </div>
+                            </Card>
+                          ) : initialAnswer ? (
+                            <Card className="p-6 border-2 hover:border-primary/30 transition-colors select-text selectable-content" ref={detailsContentRef}>
+                              <div className="prose prose-sm max-w-none dark:prose-invert select-text selectable-content">
+                                <ReactMarkdown
+                                  components={markdownComponents}
+                                >
+                                  {initialAnswer}
+                                </ReactMarkdown>
+                              </div>
+                            </Card>
+                          ) : (
+                            <Card className="p-6 text-center gradient-ai-subtle border-2">
+                              <Sparkles className="h-12 w-12 mx-auto mb-3 text-primary" />
+                              <p className="text-muted-foreground">
+                                No details available yet. Switch to Chat to ask questions!
+                              </p>
+                            </Card>
+                          )}
+                        </motion.div>
+
+                        {initialCitedSources.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, delay: 0.1 }}
+                          >
+                            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                              <BookOpen className="h-5 w-5 text-primary" />
+                              Sources
+                            </h3>
+                            <div className="grid grid-cols-1 gap-3">
+                              {initialCitedSources.map((source, index) => (
+                                <motion.div
+                                  key={index}
+                                  initial={{ opacity: 0, x: -20 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ duration: 0.2, delay: index * 0.05 }}
+                                >
+                                  <Card className="p-4 hover:shadow-lg hover:border-primary/30 transition-all">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <h4 className="font-medium text-foreground mb-1">
+                                          {source.title}
+                                        </h4>
+                                        {source.identifier && (
+                                          <p className="text-xs text-muted-foreground truncate">
+                                            {source.identifier}
+                                          </p>
+                                        )}
+                                      </div>
                                       {source.identifier && (
-                                        <p className="text-xs text-muted-foreground truncate">
-                                          {source.identifier}
-                                        </p>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 flex-shrink-0"
+                                          asChild
+                                        >
+                                          <a
+                                            href={source.identifier}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            aria-label="Open source"
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                          </a>
+                                        </Button>
                                       )}
                                     </div>
-                                    {source.identifier && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 flex-shrink-0"
-                                        asChild
-                                      >
-                                        <a
-                                          href={source.identifier}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          aria-label="Open source"
-                                        >
-                                          <ExternalLink className="h-4 w-4" />
-                                        </a>
-                                      </Button>
-                                    )}
-                                  </div>
-                                </Card>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </motion.div>
+                                  </Card>
+                                </motion.div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {/* Right Column: Chat */}
+                  <div className="w-[550px] xl:w-[600px] flex flex-col h-full border-l-2 border-border/50 pl-6 pb-16">
+                    <div className="flex items-center justify-between mb-4 sticky top-0 z-10 bg-background pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-10 h-10 gradient-ai rounded-xl flex items-center justify-center shadow-md">
+                          <MessageSquare className="h-5 w-5 text-white" />
+                        </div>
+                        <h3 className="text-lg font-semibold">AI Chat</h3>
+                        {lastQuestionAnswer && (
+                          <Badge variant="secondary" className="ml-2 text-xs">Active</Badge>
+                        )}
+                      </div>
+                      {lastQuestionAnswer && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleClearConversation}
+                          className="gap-2 text-muted-foreground hover:text-destructive h-8 text-xs"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Clear
+                        </Button>
                       )}
                     </div>
-                  </ScrollArea>
-                </TabsContent>
+                    <div className="h-full flex flex-col">
+                      <ScrollArea className="flex-1 pr-4">
+                        <div className="space-y-4 pb-4">
+                          {(lastQuestionAnswer || currentQuestion) ? (
+                            <AnimatePresence>
+                              <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="space-y-4"
+                              >
+                                {/* Show last Q&A if exists */}
+                                {lastQuestionAnswer && (
+                                  <>
+                                    {/* User Question */}
+                                    <div className="flex items-start gap-3">
+                                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                                        <UserIcon className="h-4 w-4 text-primary" />
+                                      </div>
+                                      <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
+                                        <p className="text-sm font-medium text-foreground">
+                                          {lastQuestionAnswer.question}
+                                        </p>
+                                      </Card>
+                                    </div>
 
-                <TabsContent value="chat" className="h-full mt-0">
-                  <div className="h-full flex flex-col">
-                    <ScrollArea className="flex-1 pr-4">
-                      <div className="space-y-4 pb-4">
-                        {(lastQuestionAnswer || currentQuestion) ? (
-                          <AnimatePresence>
-                            <motion.div
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="space-y-4"
-                            >
-                              {/* Show last Q&A if exists */}
-                              {lastQuestionAnswer && (
-                                <>
-                                  {/* User Question */}
+                                    {/* AI Answer */}
+                                    <div className="flex items-start gap-3">
+                                      <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
+                                        <Bot className="h-4 w-4 text-white" />
+                                      </div>
+                                      <Card className="flex-1 p-4">
+                                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                                          <ReactMarkdown
+                                            components={markdownComponents}
+                                          >
+                                            {lastQuestionAnswer.answer}
+                                          </ReactMarkdown>
+                                        </div>
+
+                                        {lastQuestionAnswer.citedSources && lastQuestionAnswer.citedSources.length > 0 && (
+                                          <div className="mt-4 pt-4 border-t border-border">
+                                            <p className="text-xs font-medium text-muted-foreground mb-2">Sources:</p>
+                                            <div className="space-y-2">
+                                              {lastQuestionAnswer.citedSources.map((source: any, index: number) => (
+                                                <div key={index} className="flex items-center gap-2 text-xs">
+                                                  <span className="text-muted-foreground">{source.title}</span>
+                                                  {source.identifier && (
+                                                    <a
+                                                      href={source.identifier}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="text-primary hover:underline"
+                                                    >
+                                                      <ExternalLink className="h-3 w-3" />
+                                                    </a>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </Card>
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* Show current question being asked */}
+                                {currentQuestion && isAsking && (
                                   <div className="flex items-start gap-3">
                                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
                                       <UserIcon className="h-4 w-4 text-primary" />
                                     </div>
                                     <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
                                       <p className="text-sm font-medium text-foreground">
-                                        {lastQuestionAnswer.question}
+                                        {currentQuestion}
                                       </p>
                                     </Card>
                                   </div>
-
-                                  {/* AI Answer */}
-                                  <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
-                                      <Bot className="h-4 w-4 text-white" />
-                                    </div>
-                                    <Card className="flex-1 p-4">
-                                      <div className="prose prose-sm max-w-none dark:prose-invert">
-                                        <ReactMarkdown
-                                          components={{
-                                            p: ({ children }) => <p className="mb-2 text-foreground leading-relaxed">{children}</p>,
-                                            ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
-                                            ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
-                                            strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
-                                            code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
-                                          }}
-                                        >
-                                          {lastQuestionAnswer.answer}
-                                        </ReactMarkdown>
-                                      </div>
-
-                                      {lastQuestionAnswer.citedSources && lastQuestionAnswer.citedSources.length > 0 && (
-                                        <div className="mt-4 pt-4 border-t border-border">
-                                          <p className="text-xs font-medium text-muted-foreground mb-2">Sources:</p>
-                                          <div className="space-y-2">
-                                            {lastQuestionAnswer.citedSources.map((source: any, index: number) => (
-                                              <div key={index} className="flex items-center gap-2 text-xs">
-                                                <span className="text-muted-foreground">{source.title}</span>
-                                                {source.identifier && (
-                                                  <a
-                                                    href={source.identifier}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-primary hover:underline"
-                                                  >
-                                                    <ExternalLink className="h-3 w-3" />
-                                                  </a>
-                                                )}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </Card>
-                                  </div>
-
-                                  <div className="flex justify-end">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={handleClearConversation}
-                                      className="gap-2 text-muted-foreground hover:text-destructive"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                      Clear conversation
-                                    </Button>
-                                  </div>
-                                </>
-                              )}
-
-                              {/* Show current question being asked */}
-                              {currentQuestion && isAsking && (
-                                <div className="flex items-start gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
-                                    <UserIcon className="h-4 w-4 text-primary" />
-                                  </div>
-                                  <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
-                                    <p className="text-sm font-medium text-foreground">
-                                      {currentQuestion}
-                                    </p>
-                                  </Card>
-                                </div>
-                              )}
+                                )}
+                              </motion.div>
+                            </AnimatePresence>
+                          ) : (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="text-center py-12"
+                            >
+                              <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                              <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                Start a conversation about this concept
+                              </p>
                             </motion.div>
-                          </AnimatePresence>
-                        ) : (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-center py-12"
-                          >
-                            <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                            <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
-                            <p className="text-sm text-muted-foreground mb-4">
-                              Start a conversation about this concept
-                            </p>
-                          </motion.div>
-                        )}
+                          )}
 
-                        {isAsking && (
+                          {isAsking && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="flex items-start gap-3"
+                            >
+                              <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
+                                <Loader2 className="h-4 w-4 text-white animate-spin" />
+                              </div>
+                              <Card className="flex-1 p-4">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <div className="flex gap-1">
+                                    <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                  </div>
+                                  Thinking...
+                                </div>
+                              </Card>
+                            </motion.div>
+                          )}
+
+                          <div ref={conversationEndRef} />
+                        </div>
+                      </ScrollArea>
+
+                      <div className="pt-4 border-t border-border shrink-0">
+                        <form onSubmit={handleSubmitQuestion} className="relative w-full">
+                          <Input
+                            ref={questionInputRef}
+                            placeholder="Ask anything..."
+                            value={question}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            disabled={isAsking || isLoading}
+                            className="pr-12 h-12 w-full focus:ring-2 focus:ring-primary/20"
+                            autoComplete="off"
+                          />
+                          <Button
+                            type="submit"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 gradient-ai text-white hover:opacity-90 transition-opacity"
+                            disabled={!question.trim() || isAsking || isLoading}
+                          >
+                            {isAsking ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </form>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Press Enter to send
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                  <TabsList className="grid w-full grid-cols-2 mb-4 sticky top-0 z-10 bg-background">
+                    <TabsTrigger value="details" className="gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Details
+                    </TabsTrigger>
+                    <TabsTrigger value="chat" className="gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Chat
+                      {lastQuestionAnswer && (
+                        <Badge variant="secondary" className="ml-2 text-xs">1</Badge>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="flex-1 overflow-hidden">
+                    <TabsContent value="details" className="h-full mt-0">
+                      <ScrollArea className="h-full pr-4">
+                        <div className="space-y-6 pb-6">
                           <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="flex items-start gap-3"
+                            transition={{ duration: 0.3 }}
                           >
-                            <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
-                              <Loader2 className="h-4 w-4 text-white animate-spin" />
-                            </div>
-                            <Card className="flex-1 p-4">
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <div className="flex gap-1">
-                                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '0ms' }} />
-                                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '150ms' }} />
-                                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                            {isLoading ? (
+                              <Card className="p-6 gradient-ai-subtle border-2">
+                                <div className="space-y-3">
+                                  <Skeleton className="h-4 w-full" />
+                                  <Skeleton className="h-4 w-full" />
+                                  <Skeleton className="h-4 w-3/4" />
                                 </div>
-                                Thinking...
-                              </div>
-                            </Card>
+                              </Card>
+                            ) : initialAnswer ? (
+                              <Card className="p-6 border-2 hover:border-primary/30 transition-colors select-text selectable-content">
+                                <div className="prose prose-sm max-w-none dark:prose-invert select-text selectable-content">
+                                  <ReactMarkdown
+                                    components={markdownComponents}
+                                  >
+                                    {initialAnswer}
+                                  </ReactMarkdown>
+                                </div>
+                              </Card>
+                            ) : (
+                              <Card className="p-6 text-center gradient-ai-subtle border-2">
+                                <Sparkles className="h-12 w-12 mx-auto mb-3 text-primary" />
+                                <p className="text-muted-foreground">
+                                  No details available yet. Switch to Chat to ask questions!
+                                </p>
+                              </Card>
+                            )}
                           </motion.div>
-                        )}
 
-                        <div ref={conversationEndRef} />
-                      </div>
-                    </ScrollArea>
-
-                    <div className="pt-4 px-2 border-t border-border shrink-0">
-                      <form onSubmit={handleSubmitQuestion} className="relative w-full">
-                        <Input
-                          ref={questionInputRef}
-                          placeholder="Ask anything about this concept..."
-                          value={question}
-                          onChange={(e) => setQuestion(e.target.value)}
-                          disabled={isAsking || isLoading}
-                          className="pr-12 h-12 w-full focus:ring-2 focus:ring-primary/20"
-                          autoComplete="off"
-                        />
-                        <Button
-                          type="submit"
-                          size="icon"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 gradient-ai text-white hover:opacity-90 transition-opacity"
-                          disabled={!question.trim() || isAsking || isLoading}
-                        >
-                          {isAsking ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
+                          {initialCitedSources.length > 0 && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.3, delay: 0.1 }}
+                            >
+                              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                                <BookOpen className="h-5 w-5 text-primary" />
+                                Sources
+                              </h3>
+                              <div className="space-y-3">
+                                {initialCitedSources.map((source, index) => (
+                                  <motion.div
+                                    key={index}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.2, delay: index * 0.05 }}
+                                  >
+                                    <Card className="p-4 hover:shadow-lg hover:border-primary/30 transition-all">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1">
+                                          <h4 className="font-medium text-foreground mb-1">
+                                            {source.title}
+                                          </h4>
+                                          {source.identifier && (
+                                            <p className="text-xs text-muted-foreground truncate">
+                                              {source.identifier}
+                                            </p>
+                                          )}
+                                        </div>
+                                        {source.identifier && (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 flex-shrink-0"
+                                            asChild
+                                          >
+                                            <a
+                                              href={source.identifier}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              aria-label="Open source"
+                                            >
+                                              <ExternalLink className="h-4 w-4" />
+                                            </a>
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </Card>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            </motion.div>
                           )}
-                        </Button>
-                      </form>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Press Enter to send • Your conversation is automatically saved
-                      </p>
-                    </div>
+                        </div>
+                      </ScrollArea>
+                    </TabsContent>
+
+                    <TabsContent value="chat" className="h-full mt-0">
+                      <div className="h-full flex flex-col">
+                        <ScrollArea className="flex-1 pr-4">
+                          <div className="space-y-4 pb-4">
+                            {(lastQuestionAnswer || currentQuestion) ? (
+                              <AnimatePresence>
+                                <motion.div
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="space-y-4"
+                                >
+                                  {/* Show last Q&A if exists */}
+                                  {lastQuestionAnswer && (
+                                    <>
+                                      {/* User Question */}
+                                      <div className="flex items-start gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                                          <UserIcon className="h-4 w-4 text-primary" />
+                                        </div>
+                                        <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
+                                          <p className="text-sm font-medium text-foreground">
+                                            {lastQuestionAnswer.question}
+                                          </p>
+                                        </Card>
+                                      </div>
+
+                                      {/* AI Answer */}
+                                      <div className="flex items-start gap-3">
+                                        <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
+                                          <Bot className="h-4 w-4 text-white" />
+                                        </div>
+                                        <Card className="flex-1 p-4">
+                                          <div className="prose prose-sm max-w-none dark:prose-invert">
+                                            <ReactMarkdown
+                                              components={markdownComponents}
+                                            >
+                                              {lastQuestionAnswer.answer}
+                                            </ReactMarkdown>
+                                          </div>
+
+                                          {lastQuestionAnswer.citedSources && lastQuestionAnswer.citedSources.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-border">
+                                              <p className="text-xs font-medium text-muted-foreground mb-2">Sources:</p>
+                                              <div className="space-y-2">
+                                                {lastQuestionAnswer.citedSources.map((source: any, index: number) => (
+                                                  <div key={index} className="flex items-center gap-2 text-xs">
+                                                    <span className="text-muted-foreground">{source.title}</span>
+                                                    {source.identifier && (
+                                                      <a
+                                                        href={source.identifier}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-primary hover:underline"
+                                                      >
+                                                        <ExternalLink className="h-3 w-3" />
+                                                      </a>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </Card>
+                                      </div>
+
+                                      <div className="flex justify-end">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={handleClearConversation}
+                                          className="gap-2 text-muted-foreground hover:text-destructive"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                          Clear conversation
+                                        </Button>
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {/* Show current question being asked */}
+                                  {currentQuestion && isAsking && (
+                                    <div className="flex items-start gap-3">
+                                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                                        <UserIcon className="h-4 w-4 text-primary" />
+                                      </div>
+                                      <Card className="flex-1 p-4 bg-primary/5 border-primary/20">
+                                        <p className="text-sm font-medium text-foreground">
+                                          {currentQuestion}
+                                        </p>
+                                      </Card>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              </AnimatePresence>
+                            ) : (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="text-center py-12"
+                              >
+                                <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                                <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                  Start a conversation about this concept
+                                </p>
+                              </motion.div>
+                            )}
+
+                            {isAsking && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="flex items-start gap-3"
+                              >
+                                <div className="w-8 h-8 rounded-full gradient-ai flex items-center justify-center flex-shrink-0 mt-1">
+                                  <Loader2 className="h-4 w-4 text-white animate-spin" />
+                                </div>
+                                <Card className="flex-1 p-4">
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <div className="flex gap-1">
+                                      <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                      <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                      <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                    Thinking...
+                                  </div>
+                                </Card>
+                              </motion.div>
+                            )}
+
+                            <div ref={conversationEndRef} />
+                          </div>
+                        </ScrollArea>
+
+                        <div className="pt-4 px-2 border-t border-border shrink-0">
+                          <form onSubmit={handleSubmitQuestion} className="relative w-full">
+                            <Input
+                              ref={questionInputRef}
+                              placeholder="Ask anything about this concept..."
+                              value={question}
+                              onChange={(e) => setQuestion(e.target.value)}
+                              disabled={isAsking || isLoading}
+                              className="pr-12 h-12 w-full focus:ring-2 focus:ring-primary/20"
+                              autoComplete="off"
+                            />
+                            <Button
+                              type="submit"
+                              size="icon"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 gradient-ai text-white hover:opacity-90 transition-opacity"
+                              disabled={!question.trim() || isAsking || isLoading}
+                            >
+                              {isAsking ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </form>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Press Enter to send • Your conversation is automatically saved
+                          </p>
+                        </div>
+                      </div>
+                    </TabsContent>
                   </div>
-                </TabsContent>
-              </div>
-            </Tabs>
+                </Tabs>
+              )}
+            </div>
           </div>
-        </div>
-      </DrawerContent>
-    </Drawer>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
