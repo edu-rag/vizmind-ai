@@ -388,26 +388,6 @@ export function HierarchicalMindMapDisplay() {
     }
   }, [currentMindMap?.hierarchical_data]);
 
-  // Initialize expanded nodes (expand root and first level by default)
-  useEffect(() => {
-    if (convertedNodeMetadata.size > 0 && expandedNodes.size === 0) {
-      const initialExpanded = new Set<string>();
-
-      // Find root node (node with no parent) and expand it
-      convertedNodeMetadata.forEach((metadata, nodeId) => {
-        if (metadata.depth === 0) {
-          initialExpanded.add(nodeId);
-        }
-        // Also expand first level nodes
-        if (metadata.depth === 1) {
-          initialExpanded.add(nodeId);
-        }
-      });
-
-      setExpandedNodes(initialExpanded);
-    }
-  }, [convertedNodeMetadata]);
-
   // Filter visible nodes and edges based on expanded state
   const { visibleNodes, visibleEdges } = useMemo(() => {
 
@@ -492,14 +472,8 @@ export function HierarchicalMindMapDisplay() {
       setNodeMetadata(newNodeMetadata);
       setZoom(1);
 
-      // Reset expanded nodes to initial state (root and first level)
-      const initialExpanded = new Set<string>();
-      newNodeMetadata.forEach((metadata, nodeId) => {
-        if (metadata.depth === 0 || metadata.depth === 1) {
-          initialExpanded.add(nodeId);
-        }
-      });
-      setExpandedNodes(initialExpanded);
+      // Reset expanded nodes to initial state 
+      handleCollapseAll();
 
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
@@ -536,6 +510,13 @@ export function HierarchicalMindMapDisplay() {
     });
     setExpandedNodes(rootNodes);
   }, [nodeMetadata]);
+
+  // Call handleCollapseAll initially when nodeMetadata changes
+  useEffect(() => {
+    if (nodeMetadata.size > 0) {
+      handleCollapseAll();
+    }
+  }, [nodeMetadata, handleCollapseAll]);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(!isFullscreen);
