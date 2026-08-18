@@ -10,9 +10,10 @@ load_dotenv()
 class Settings(BaseSettings):
     # LLM & Embeddings
     GROQ_API_KEYS: str
-    MODEL_NAME_FOR_EMBEDDING: str = (
-        "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-    )
+    OLLAMA_BASE_URL: str
+    OLLAMA_EMBED_MODEL: str = "embeddinggemma:latest"
+    OLLAMA_EMBED_TIMEOUT_SECONDS: float = 120.0
+    OLLAMA_EMBED_BATCH_SIZE: int = 32
     LLM_MODEL_NAME_GROQ: str = "llama-3.3-70b-versatile"
 
     # VizMind AI Workflow Settings
@@ -25,9 +26,9 @@ class Settings(BaseSettings):
 
     # Langsmith
     LANGSMITH_TRACING: bool = False
-    LANGSMITH_ENDPOINT: str
-    LANGSMITH_API_KEY: str
-    LANGSMITH_PROJECT: str
+    LANGSMITH_ENDPOINT: str = ""
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = ""
 
     # MongoDB
     MONGODB_URI: str
@@ -38,11 +39,11 @@ class Settings(BaseSettings):
     MONGODB_ATLAS_VECTOR_INDEX_NAME: str = "vector_index"
 
     # S3
-    S3_ACCESS_KEY_ID: str
-    S3_SECRET_ACCESS_KEY: str
-    S3_ENDPOINT_URL: str
-    S3_BUCKET_NAME: str
-    S3_PUBLIC_DOMAIN: str
+    S3_ACCESS_KEY_ID: str = ""
+    S3_SECRET_ACCESS_KEY: str = ""
+    S3_ENDPOINT_URL: str = ""
+    S3_BUCKET_NAME: str = ""
+    S3_PUBLIC_DOMAIN: str = ""
 
     # JWT Authentication
     JWT_SECRET_KEY: str

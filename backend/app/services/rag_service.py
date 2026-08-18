@@ -4,9 +4,9 @@ from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_groq import ChatGroq
 from langchain_mongodb import MongoDBAtlasVectorSearch
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from app.core.config import settings, logger
 from app.db.mongodb_utils import get_db
+from app.services.ollama_embedding_service import get_embedding_model
 
 
 class RAGService:
@@ -25,9 +25,7 @@ class RAGService:
         """
         self.user_id = user_id
         self.concept_map_id = concept_map_id
-        self.embedding = HuggingFaceEmbeddings(
-            model_name=settings.MODEL_NAME_FOR_EMBEDDING
-        )
+        self.embedding = get_embedding_model()
         self.llm = ChatGroq(
             temperature=0.1,
             groq_api_key=settings.GROQ_API_KEY,

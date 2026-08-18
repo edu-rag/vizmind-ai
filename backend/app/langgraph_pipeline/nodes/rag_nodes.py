@@ -9,7 +9,7 @@ from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
 from langchain_mongodb import MongoDBAtlasVectorSearch
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from app.services.ollama_embedding_service import get_embedding_model
 from langchain_core.messages import HumanMessage, AIMessage
 import time
 import json
@@ -31,9 +31,7 @@ async def retrieve_documents_node(state: RAGState) -> RAGState:
         start_time = time.time()
 
         # Initialize embedding model
-        embedding_model = HuggingFaceEmbeddings(
-            model_name=settings.MODEL_NAME_FOR_EMBEDDING
-        )
+        embedding_model = get_embedding_model()
 
         # Connect to MongoDB collection
         db = get_db()

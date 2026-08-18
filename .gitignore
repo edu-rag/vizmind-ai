@@ -1,3 +1,6 @@
 # Local Netlify folder
 .netlify
 .venv
+.env
+.env.*
+!.env.example

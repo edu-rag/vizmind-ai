@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{Dockerfile,uvicorn_runner.py,clear_all_collections.py,**/__pycache__/**,**/*.pyc}"
+    }
+  }
+}

@@ -11,7 +11,7 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import MarkdownHeaderTextSplitter
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from app.services.ollama_embedding_service import get_embedding_model
 
 from app.core.config import settings, logger
 from app.services.docling_service import DoclingService
@@ -300,9 +300,7 @@ async def embed_and_store_node(
             return set_error(state, "No chunks available for embedding")
 
         # Initialize embedding model
-        embedding_model = HuggingFaceEmbeddings(
-            model_name=settings.MODEL_NAME_FOR_EMBEDDING
-        )
+        embedding_model = get_embedding_model()
 
         # Prepare texts for embedding
         texts_to_embed = [chunk.page_content for chunk in chunks]

@@ -620,7 +620,10 @@ cp .env.example .env
 ```env
 # LLM & AI Services
 GROQ_API_KEYS=your_groq_api_key_1,your_groq_api_key_2,your_groq_api_key_3
-MODEL_NAME_FOR_EMBEDDING=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+OLLAMA_BASE_URL=http://xxx.xxx.xxx.xxx:11434
+OLLAMA_EMBED_MODEL=embeddinggemma:latest
+OLLAMA_EMBED_TIMEOUT_SECONDS=120
+OLLAMA_EMBED_BATCH_SIZE=32
 LLM_MODEL_NAME_GROQ=llama-3.3-70b-versatile
 
 # MongoDB Atlas Configuration

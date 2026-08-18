@@ -56,7 +56,6 @@ langchain-core==0.3.67
 langchain-docling==1.0.0
 langchain-experimental==0.3.4
 langchain-groq==0.3.4
-langchain-huggingface==0.3.0
 langchain-mongodb==0.6.2
 langchain-text-splitters==0.3.8
 langgraph==0.5.0
@@ -127,7 +126,6 @@ scikit-image==0.25.2
 scikit-learn==1.7.1
 scipy==1.16.1
 semchunk==2.2.2
-sentence-transformers==5.0.0
 setuptools==80.9.0
 shapely==2.1.1
 shellingham==1.5.4
