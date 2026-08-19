@@ -3,9 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # Updated
 from typing import Optional
 
 from app.core.config import settings, logger
-from app.core.security import (
-    jwt,
-)  # Assuming jwt for decode is here or directly from jose
+from app.core.security import PyJWTError, jwt
 from app.models.user_models import UserModelInDB
 from app.services.user_service import (
     get_user_by_google_id,
@@ -47,7 +45,7 @@ async def get_current_user(
         if user_google_id is None:
             logger.warning("Token payload missing 'sub' (user identifier).")
             raise credentials_exception
-    except jwt.JWTError as e:  # Catch specific JWT errors from python-jose
+    except PyJWTError as e:
         logger.warning(f"JWTError during token decode: {e}")
         raise credentials_exception from e
     except Exception as e:  # Catch any other unexpected errors during decode

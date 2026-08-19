@@ -2,7 +2,7 @@ import os
 import random
 from typing import List, Optional
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     OLLAMA_EMBED_MODEL: str = "embeddinggemma:latest"
     OLLAMA_EMBED_TIMEOUT_SECONDS: float = 120.0
     OLLAMA_EMBED_BATCH_SIZE: int = 32
-    LLM_MODEL_NAME_GROQ: str = "llama-3.3-70b-versatile"
+    LLM_MODEL_NAME_GROQ: str = "openai/gpt-oss-120b"
+    GROQ_REASONING_EFFORT: str = "low"
 
     # VizMind AI Workflow Settings
     WORKFLOW_MAX_RETRIES: int = 3
@@ -78,11 +79,11 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        # For Pydantic V2, case_sensitive = False is default for .env
-        # For Pydantic V1 settings, you might need case_sensitive = True if your .env keys are uppercase
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     def _get_groq_api_keys_list(self) -> List[str]:
         """Parse comma-separated GROQ_API_KEYS into a list."""

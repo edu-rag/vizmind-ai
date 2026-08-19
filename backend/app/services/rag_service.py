@@ -2,11 +2,11 @@ from typing import List, Dict, Any
 from langchain_core.prompts import PromptTemplate
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_groq import ChatGroq
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from app.core.config import settings, logger
 from app.db.mongodb_utils import get_db
 from app.services.ollama_embedding_service import get_embedding_model
+from app.services.groq_service import create_groq_chat
 
 
 class RAGService:
@@ -26,11 +26,7 @@ class RAGService:
         self.user_id = user_id
         self.concept_map_id = concept_map_id
         self.embedding = get_embedding_model()
-        self.llm = ChatGroq(
-            temperature=0.1,
-            groq_api_key=settings.GROQ_API_KEY,
-            model_name=settings.LLM_MODEL_NAME_GROQ,
-        )
+        self.llm = create_groq_chat(temperature=0.1)
         # Updated prompt specific to VizMind AI
         self.prompt = PromptTemplate.from_template(
             """

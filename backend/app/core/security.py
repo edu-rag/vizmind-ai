@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import httpx
 
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 

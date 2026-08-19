@@ -7,11 +7,11 @@ import uuid
 import asyncio
 from datetime import datetime
 from typing import Dict, Any, List
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from app.services.ollama_embedding_service import get_embedding_model
+from app.services.groq_service import create_groq_chat
 
 from app.core.config import settings, logger
 from app.services.docling_service import DoclingService
@@ -187,11 +187,7 @@ async def _process_sections_parallel(sections: List[str]) -> List[str]:
         api_key = api_keys[i % len(api_keys)]
 
         # Create LLM instance with specific API key
-        llm = ChatGroq(
-            temperature=0.0,
-            groq_api_key=api_key,
-            model_name=settings.LLM_MODEL_NAME_GROQ,
-        )
+        llm = create_groq_chat(api_key=api_key, temperature=0.0)
 
         outline_chain = outline_prompt | llm | StrOutputParser()
 
@@ -579,10 +575,8 @@ async def _optimize_mind_map_structure(merged_outline: str) -> str:
     logger.info("[DocumentProcessing] Optimizing mind map structure")
 
     # Initialize LLM for optimization
-    llm = ChatGroq(
+    llm = create_groq_chat(
         temperature=1,  # Slightly higher for creative reorganization
-        groq_api_key=settings.GROQ_API_KEY,
-        model_name=settings.LLM_MODEL_NAME_GROQ,
     )
 
     optimization_prompt = ChatPromptTemplate.from_template(

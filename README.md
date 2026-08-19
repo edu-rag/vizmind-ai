@@ -624,7 +624,8 @@ OLLAMA_BASE_URL=http://xxx.xxx.xxx.xxx:11434
 OLLAMA_EMBED_MODEL=embeddinggemma:latest
 OLLAMA_EMBED_TIMEOUT_SECONDS=120
 OLLAMA_EMBED_BATCH_SIZE=32
-LLM_MODEL_NAME_GROQ=llama-3.3-70b-versatile
+LLM_MODEL_NAME_GROQ=openai/gpt-oss-120b
+GROQ_REASONING_EFFORT=low
 
 # MongoDB Atlas Configuration
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
@@ -1141,7 +1142,7 @@ DEFAULT_TOP_K=10
 Modify the LLM configuration in `app/core/config.py`:
 
 ```python
-LLM_MODEL_NAME_GROQ: str = "llama-3.3-70b-versatile"  # or other Groq models
+LLM_MODEL_NAME_GROQ: str = "openai/gpt-oss-120b"
 ```
 
 ## 🐳 Docker Deployment

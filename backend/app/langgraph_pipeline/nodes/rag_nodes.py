@@ -7,9 +7,9 @@ from typing import Dict, Any, List
 from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_groq import ChatGroq
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from app.services.ollama_embedding_service import get_embedding_model
+from app.services.groq_service import create_groq_chat
 from langchain_core.messages import HumanMessage, AIMessage
 import time
 import json
@@ -91,11 +91,7 @@ async def grade_documents_node(state: RAGState) -> RAGState:
         logger.info(f"[RAG] Grading {len(retrieved_docs)} documents")
 
         # Initialize LLM for grading
-        llm = ChatGroq(
-            temperature=0.0,
-            groq_api_key=settings.GROQ_API_KEY,
-            model_name=settings.LLM_MODEL_NAME_GROQ,
-        )
+        llm = create_groq_chat(temperature=0.0)
 
         # Build context-aware grading prompt with hierarchical information
         node_context = ""
@@ -196,11 +192,7 @@ async def generate_answer_node(state: RAGState) -> RAGState:
             relevant_docs = []
 
         # Initialize LLM
-        llm = ChatGroq(
-            temperature=0.1,
-            groq_api_key=settings.GROQ_API_KEY,
-            model_name=settings.LLM_MODEL_NAME_GROQ,
-        )
+        llm = create_groq_chat(temperature=0.1)
 
         # Build node context for focused answering
         node_context_section = ""
